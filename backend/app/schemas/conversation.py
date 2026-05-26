@@ -58,6 +58,7 @@ class ConversationResponse(ConversationBase):
 class ConversationWithMessagesResponse(ConversationResponse):
     """带消息列表的对话响应"""
     messages: list[MessageResponse] = []
+    message_count: int = 0
     document_count: int = 0
 
 

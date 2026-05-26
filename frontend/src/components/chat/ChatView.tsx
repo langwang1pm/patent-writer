@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { Send, FileText, Download, ChevronRight } from 'lucide-react'
+import { Send, FileText } from 'lucide-react'
 import { useConversationStore } from '@/stores/conversationStore'
-import { useCitationStore } from '@/stores/citationStore'
 import { useKnowledgeStore } from '@/stores/knowledgeStore'
 import { documentApi } from '@/services/documentApi'
 import { cn } from '@/utils/cn'
@@ -10,7 +9,6 @@ import { cn } from '@/utils/cn'
 export default function ChatView() {
   const { conversationId } = useParams()
   const { messages, currentConversationId, isLoading, isStreaming, sendMessage, setCurrentConversation } = useConversationStore()
-  const { setCitations } = useCitationStore()
   const { currentConfigId } = useKnowledgeStore()
   const [inputValue, setInputValue] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -113,38 +111,6 @@ export default function ChatView() {
               {message.role === 'assistant' && (
                 <div className="space-y-4">
                   <div className="text-sm whitespace-pre-wrap">{message.content}</div>
-
-                  {/* 文档卡片 */}
-                  {message.document && (
-                    <div className="border border-gray-200 rounded-lg p-4 bg-white mt-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <FileText className="w-4 h-4 text-primary-600" />
-                        <span className="text-sm font-medium text-gray-700">{message.document.title}</span>
-                      </div>
-                      <div
-                        className="text-xs text-gray-500 line-clamp-3 mb-3"
-                        dangerouslySetInnerHTML={{ __html: message.document.content_html }}
-                      />
-                      <div className="flex items-center gap-2">
-                        <button
-                          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-primary-50 text-primary-700 rounded-lg hover:bg-primary-100 transition-colors"
-                          onClick={() => {
-                            // TODO: 插入编辑器
-                          }}
-                        >
-                          <ChevronRight className="w-3 h-3" />
-                          插入编辑器
-                        </button>
-                        <button
-                          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                          onClick={() => message.document && handleExportDocument(message.document.id)}
-                        >
-                          <Download className="w-3 h-3" />
-                          下载
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </div>

@@ -1,97 +1,124 @@
 import { create } from 'zustand'
-import type { KnowledgeConfig } from '@/types/knowledge'
-import { knowledgeApi } from '@/services/knowledgeApi'
+import { devtools } from 'zustand/middleware'
+import { KnowledgeFile, KnowledgeState } from '@/types/knowledge'
 
-interface KnowledgeState {
-  configs: KnowledgeConfig[]
-  currentConfigId: string | null
-  isLoading: boolean
-  error: string | null
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
 
-  // Actions
-  fetchConfigs: () => Promise<void>
-  createConfig: (data: {
-    name: string
-    dify_base_url: string
-    dify_api_key: string
-    knowledge_id: string
-    is_default?: boolean
-    top_k?: number
-    score_threshold?: number
-    rerank_enabled?: boolean
-  }) => Promise<KnowledgeConfig>
-  updateConfig: (id: string, data: Partial<KnowledgeConfig>) => Promise<void>
-  deleteConfig: (id: string) => Promise<void>
-  setCurrentConfig: (id: string | null) => void
-  testConnection: (id: string) => Promise<boolean>
-}
+export const useKnowledgeStore = create<KnowledgeState>()(
+  devtools((set, get) => ({
+    files: [],
+    isLoading: false,
+    isUploading: false,
+    error: null,
 
-export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
-  configs: [],
-  currentConfigId: null,
-  isLoading: false,
-  error: null,
+    fetchFiles: async () => {
+      set({ isLoading: true, error: null })
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/knowledge/files`, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
 
-  fetchConfigs: async () => {
-    set({ isLoading: true, error: null })
-    try {
-      const response = await knowledgeApi.list()
-      set({
-        configs: response.items,
-        currentConfigId: response.default_id,
-        isLoading: false,
-      })
-    } catch (error) {
-      set({ error: (error as Error).message, isLoading: false })
-    }
-  },
+        if (!response.ok) {
+          throw new Error('获取文件列表失败')
+        }
 
-  createConfig: async (data) => {
-    set({ isLoading: true, error: null })
-    try {
-      const config = await knowledgeApi.create(data)
-      set((state) => ({
-        configs: [config, ...state.configs],
-        isLoading: false,
-      }))
-      return config
-    } catch (error) {
-      set({ error: (error as Error).message, isLoading: false })
-      throw error
-    }
-  },
+        const data = await response.json()
+        set({ files: data.items || [], isLoading: false })
+      } catch (error) {
+        console.error('获取文件列表失败:', error)
+        set({
+          isLoading: false,
+          error: error instanceof Error ? error.message : '获取文件列表失败',
+        })
+      }
+    },
 
-  updateConfig: async (id, data) => {
-    try {
-      const updated = await knowledgeApi.update(id, data)
-      set((state) => ({
-        configs: state.configs.map((c) => (c.id === id ? updated : c)),
-      }))
-    } catch (error) {
-      set({ error: (error as Error).message })
-    }
-  },
+    uploadFile: async (file: File, description?: string) => {
+      set({ isUploading: true, error: null })
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        if (description) {
+          formData.append('description', description)
+        }
 
-  deleteConfig: async (id) => {
-    try {
-      await knowledgeApi.delete(id)
-      set((state) => ({
-        configs: state.configs.filter((c) => c.id !== id),
-        currentConfigId: state.currentConfigId === id ? null : state.currentConfigId,
-      }))
-    } catch (error) {
-      set({ error: (error as Error).message })
-    }
-  },
+        const response = await fetch(`${API_BASE_URL}/api/knowledge/files/upload`, {
+          method: 'POST',
+          body: formData,
+        })
 
-  setCurrentConfig: (id) => set({ currentConfigId: id }),
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.detail || '上传失败')
+        }
 
-  testConnection: async (id) => {
-    try {
-      const result = await knowledgeApi.test(id)
-      return result.success
-    } catch {
-      return false
-    }
-  },
-}))
+        set({ isUploading: false })
+      } catch (error) {
+        console.error('上传文件失败:', error)
+        set({
+          isUploading: false,
+          error: error instanceof Error ? error.message : '上传失败',
+        })
+        throw error
+      }
+    },
+
+    deleteFile: async (fileId: string) => {
+      set({ error: null })
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/knowledge/files/${fileId}`, {
+          method: 'DELETE',
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.detail || '删除失败')
+        }
+
+        // 从列表中移除
+        set((state) => ({
+          files: state.files.filter((f) => f.id !== fileId),
+        }))
+      } catch (error) {
+        console.error('删除文件失败:', error)
+        set({
+          error: error instanceof Error ? error.message : '删除失败',
+        })
+        throw error
+      }
+    },
+
+    searchFiles: async (query: string) => {
+      set({ isLoading: true, error: null })
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/knowledge/files/search?q=${encodeURIComponent(query)}`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          }
+        )
+
+        if (!response.ok) {
+          throw new Error('搜索失败')
+        }
+
+        const data = await response.json()
+        set({ files: data.items || [], isLoading: false })
+      } catch (error) {
+        console.error('搜索文件失败:', error)
+        set({
+          isLoading: false,
+          error: error instanceof Error ? error.message : '搜索失败',
+        })
+      }
+    },
+
+    clearError: () => {
+      set({ error: null })
+    },
+  }))
+)

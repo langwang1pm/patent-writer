@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db.engine import engine, Base
-from app.api import conversations, documents, citations, knowledge
+from app.api import conversations, documents, citations, knowledge, knowledge_files
 
 # 配置日志
 structlog.configure(
@@ -70,6 +70,7 @@ app.include_router(conversations.router, prefix="/api/v1", tags=["对话管理"]
 app.include_router(documents.router, prefix="/api/v1", tags=["文档管理"])
 app.include_router(citations.router, prefix="/api/v1", tags=["引用管理"])
 app.include_router(knowledge.router, prefix="/api/v1", tags=["知识库配置"])
+app.include_router(knowledge_files.router, prefix="/api/v1", tags=["知识库文件管理"])
 
 
 @app.get("/health")

@@ -46,52 +46,62 @@ async def list_conversations(
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = Query(None, description="搜索标题"),
 ):
-    """获取对话列表"""
-    # 构建查询
-    query = select(Conversation)
+    """获取对话列表（无 N+1）"""
+    # 子查询：统计每个 conversation 的消息数
+    msg_count_sub = (
+        select(Message.conversation_id, func.count(Message.id).label("msg_count"))
+        .group_by(Message.conversation_id)
+        .subquery()
+    )
+
+    # 子查询：统计每个 conversation 的文档数
+    doc_count_sub = (
+        select(Document.conversation_id, func.count(Document.id).label("doc_count"))
+        .group_by(Document.conversation_id)
+        .subquery()
+    )
+
+    # 主查询：conversation + 左连接统计数（3 表 join → 固定 3 次查询）
+    query = (
+        select(
+            Conversation,
+            func.coalesce(msg_count_sub.c.msg_count, 0).label("msg_count"),
+            func.coalesce(doc_count_sub.c.doc_count, 0).label("doc_count"),
+        )
+        .outerjoin(msg_count_sub, Conversation.id == msg_count_sub.c.conversation_id)
+        .outerjoin(doc_count_sub, Conversation.id == doc_count_sub.c.conversation_id)
+    )
+
     count_query = select(func.count(Conversation.id))
 
     if search:
         query = query.where(Conversation.title.ilike(f"%{search}%"))
         count_query = count_query.where(Conversation.title.ilike(f"%{search}%"))
 
-    # 排序和分页
+    # 总数（1 次查询）
+    count_result = await db.execute(count_query)
+    total = count_result.scalar() or 0
+
+    # 分页
     query = query.order_by(desc(Conversation.updated_at))
     query = query.offset((page - 1) * page_size).limit(page_size)
 
-    # 执行查询
     result = await db.execute(query)
-    conversations = result.scalars().all()
+    rows = result.all()
 
-    count_result = await db.execute(count_query)
-    total = count_result.scalar()
-
-    # 获取消息数量
-    response_items = []
-    for conv in conversations:
-        # 获取消息数
-        msg_count_result = await db.execute(
-            select(func.count(Message.id)).where(Message.conversation_id == conv.id)
+    response_items = [
+        ConversationWithMessagesResponse(
+            id=row._mapping["Conversation"].id,
+            title=row._mapping["Conversation"].title,
+            knowledge_config_id=row._mapping["Conversation"].knowledge_config_id,
+            created_at=row._mapping["Conversation"].created_at,
+            updated_at=row._mapping["Conversation"].updated_at,
+            messages=[],
+            message_count=row._mapping["msg_count"],
+            document_count=row._mapping["doc_count"],
         )
-        msg_count = msg_count_result.scalar()
-
-        # 获取文档数
-        doc_count_result = await db.execute(
-            select(func.count(Document.id)).where(Document.conversation_id == conv.id)
-        )
-        doc_count = doc_count_result.scalar()
-
-        response_items.append(
-            ConversationWithMessagesResponse(
-                id=conv.id,
-                title=conv.title,
-                knowledge_config_id=conv.knowledge_config_id,
-                created_at=conv.created_at,
-                updated_at=conv.updated_at,
-                messages=[],
-                document_count=doc_count,
-            )
-        )
+        for row in rows
+    ]
 
     return ConversationListResponse(
         items=response_items,

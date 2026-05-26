@@ -42,11 +42,8 @@ export default function Sidebar() {
       {/* 顶部操作区 */}
       <div className="p-3 space-y-2">
         <button
-          onClick={() => {
-            // TODO: 导航到知识库管理页面
-            console.log('知识库页面待开发')
-          }}
-          className="w-full flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          onClick={() => navigate('/knowledge')}
+          className="w-full flex items-center gap-2 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
         >
           <BookOpen className="w-4 h-4" />
           <span>知识库</span>

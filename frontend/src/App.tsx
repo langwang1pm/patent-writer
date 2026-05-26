@@ -11,6 +11,7 @@ function App() {
           <Route path="chat" element={<ChatPage />} />
           <Route path="chat/:conversationId" element={<ChatPage />} />
           <Route path="document/:documentId" element={<DocumentPage />} />
+          <Route path="knowledge" element={<KnowledgePage />} />
         </Route>
       </Routes>
     </BrowserRouter>
@@ -32,6 +33,15 @@ const DocumentPage = () => {
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full"></div></div>}>
       <DocumentView />
+    </Suspense>
+  )
+}
+
+const KnowledgePage = () => {
+  const KnowledgeView = lazy(() => import('./components/knowledge/KnowledgePage'))
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full"></div></div>}>
+      <KnowledgeView />
     </Suspense>
   )
 }
