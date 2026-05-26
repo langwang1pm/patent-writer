@@ -96,4 +96,4 @@ alembic upgrade head
 - `DELETE /api/v1/knowledge/configs/{id}` - 删除配置
 - `POST /api/v1/knowledge/configs/{id}/test` - 测试连接
 
-### 测试github
+### 测试github连通性
