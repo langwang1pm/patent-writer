@@ -204,7 +204,7 @@ export default function KnowledgePage() {
 
                 <div className="col-span-2 flex items-center justify-end gap-1">
                   <button
-                    onClick={() => window.open(file.url, '_blank')}
+                    onClick={() => window.open(`/api/v1/knowledge/files/${file.id}/download?disposition=inline`, '_blank')}
                     className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-white rounded transition-colors"
                     title="查看"
                   >
@@ -213,7 +213,7 @@ export default function KnowledgePage() {
                   <button
                     onClick={() => {
                       const link = document.createElement('a')
-                      link.href = file.url
+                      link.href = `/api/v1/knowledge/files/${file.id}/download?disposition=attachment`
                       link.download = file.name
                       link.click()
                     }}

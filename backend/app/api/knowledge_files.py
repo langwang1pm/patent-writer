@@ -1,18 +1,33 @@
 """知识库文件管理 API"""
 import uuid
 import aiohttp
+import os
+from pathlib import Path
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from app.dependencies import get_db
 from app.models.knowledge_config import KnowledgeConfig
 from app.models.knowledge_file import KnowledgeFile
 
+# 本地文件存储目录
+UPLOAD_DIR = Path("uploads/knowledge_files")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 router = APIRouter()
+
+
+def _console_url(config: KnowledgeConfig, path: str) -> str:
+    """
+    构建 Dify Console API URL（/console/api 前缀）
+    注意：Dify App API 的 base_url 通常带 /v1 前缀，但 Console API 不带 /v1，
+    所以需要去掉 /v1 再拼接 /console/api 路径。
+    """
+    base = config.dify_base_url.rstrip("/").replace("/v1", "", 1)
+    return f"{base}/console/api{path}"
 
 
 @router.get("/knowledge/files")
@@ -20,54 +35,39 @@ async def list_knowledge_files(
     db: Annotated[AsyncSession, Depends(get_db)],
     knowledge_config_id: uuid.UUID | None = None,
 ):
-    """
-    获取知识库文件列表
-
-    如果指定了 knowledge_config_id，则从对应的 Dify 知识库获取文件列表
-    否则从默认知识库获取
-    """
-    # 获取知识库配置
+    """获取知识库文件列表"""
     config = await _get_knowledge_config(db, knowledge_config_id)
 
-    # 调用 Dify API 获取文件列表
     try:
         async with aiohttp.ClientSession() as session:
             url = f"{config.dify_base_url}/datasets/{config.knowledge_id}/documents"
-            headers = {
-                "Authorization": f"Bearer {config.dify_api_key}",
-            }
+            headers = {"Authorization": f"Bearer {config.dify_api_key}"}
 
             async with session.get(url, headers=headers) as response:
                 if response.status != 200:
-                    error_text = await response.text()
                     raise HTTPException(
                         status_code=response.status,
-                        detail=f"获取文件列表失败: {error_text}"
+                        detail=f"获取文件列表失败: {await response.text()}"
                     )
 
                 data = await response.json()
                 items = data.get("data", [])
-                
-                # 从数据库获取文件大小信息
+
+                # 补充 size（从数据库查）
                 result = await db.execute(
                     select(KnowledgeFile).where(
                         KnowledgeFile.knowledge_config_id == config.id
                     )
                 )
                 file_records = {fr.dify_document_id: fr for fr in result.scalars().all()}
-                
-                # 为每个选项补充 size 字段
                 for item in items:
                     doc_id = item.get("id")
                     if doc_id and doc_id in file_records:
                         item["size"] = file_records[doc_id].size
                     else:
                         item["size"] = None
-                
-                return {
-                    "items": items,
-                    "total": len(items),
-                }
+
+                return {"items": items, "total": len(items)}
 
     except aiohttp.ClientError as e:
         raise HTTPException(status_code=500, detail=f"连接 Dify 失败: {str(e)}")
@@ -79,69 +79,159 @@ async def upload_knowledge_file(
     file: UploadFile = File(...),
     knowledge_config_id: uuid.UUID | None = None,
 ):
-    """
-    上传文件到知识库
-    """
-    # 获取知识库配置
+    """上传文件到 Dify 知识库，并保存到本地"""
     config = await _get_knowledge_config(db, knowledge_config_id)
+    raw_filename = file.filename or "upload"
+    file_content = await file.read()
+    file_size = len(file_content)
+    
+    # 保存文件到本地
+    file_ext = Path(raw_filename).suffix
+    local_filename = f"{uuid.uuid4()}{file_ext}"
+    local_path = UPLOAD_DIR / local_filename
+    
+    with open(local_path, "wb") as f:
+        f.write(file_content)
 
-    # 调用 Dify API 上传文件
     try:
         async with aiohttp.ClientSession() as session:
             url = f"{config.dify_base_url}/datasets/{config.knowledge_id}/document/create_by_file"
-
-            # 获取原始文件名（FastAPI 已经正确解码了 multipart 中的 filename）
-            raw_filename = file.filename or 'upload'
-            
-            # 获取文件大小
-            file_size = 0
-            file_content = await file.read()
-            file_size = len(file_content)
-
-            # 准备表单数据
-            # 关键：aiohttp.FormData 在处理非 ASCII filename 时会进行 percent-encode
-            # 但 Dify 接收后不解码，导致显示的是编码后的字符串
-            # 解决方案：使用 quote_fields=False 禁止自动编码
             form_data = aiohttp.FormData(quote_fields=False)
             form_data.add_field(
-                'file',
-                file_content,
+                "file", file_content,
                 filename=raw_filename,
-                content_type=file.content_type
+                content_type=file.content_type or "application/octet-stream",
             )
-            form_data.add_field('data', '{"indexing_technique":"high_quality","process_rule":{"mode":"automatic"}}')
-
-            headers = {
-                "Authorization": f"Bearer {config.dify_api_key}",
-            }
+            form_data.add_field(
+                "data",
+                '{"indexing_technique":"high_quality","process_rule":{"mode":"automatic"}}',
+            )
+            headers = {"Authorization": f"Bearer {config.dify_api_key}"}
 
             async with session.post(url, data=form_data, headers=headers) as response:
                 if response.status not in (200, 201):
-                    error_text = await response.text()
                     raise HTTPException(
                         status_code=response.status,
-                        detail=f"上传文件失败: {error_text}"
+                        detail=f"上传到 Dify 失败: {await response.text()}",
                     )
+                dify_data = await response.json()
 
-                data = await response.json()
-                
-                # 保存到数据库
-                if data and 'document' in data:
-                    doc = data['document']
-                    knowledge_file = KnowledgeFile(
-                        dify_document_id=doc['id'],
-                        knowledge_config_id=config.id,
-                        name=doc.get('name', raw_filename),
-                        size=file_size,
-                        word_count=doc.get('word_count'),
-                    )
-                    db.add(knowledge_file)
-                    await db.commit()
-                
-                return data
+        dify_doc = dify_data.get("document", {})
+        dify_doc_id = dify_doc.get("id")
+        if not dify_doc_id:
+            raise HTTPException(status_code=500, detail="Dify 未返回文档 ID")
+
+        knowledge_file = KnowledgeFile(
+            dify_document_id=dify_doc_id,
+            knowledge_config_id=config.id,
+            name=dify_doc.get("name", raw_filename),
+            size=file_size,
+            word_count=dify_doc.get("word_count"),
+            local_path=str(local_path),  # 保存本地路径
+        )
+        db.add(knowledge_file)
+        await db.commit()
+
+        return dify_data
 
     except aiohttp.ClientError as e:
         raise HTTPException(status_code=500, detail=f"连接 Dify 失败: {str(e)}")
+
+
+@router.get("/knowledge/files/{file_id}/download")
+async def download_knowledge_file(
+    file_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    knowledge_config_id: uuid.UUID | None = None,
+    disposition: str = Query("attachment", description="inline=预览, attachment=下载"),
+):
+    """
+    从本地文件系统提供文件下载。
+    
+    优先使用本地保存的文件，如果没有则尝试从 Dify 下载（兼容旧数据）。
+
+    - disposition=inline：让浏览器直接预览（PDF/图片会内联显示）
+    - disposition=attachment：强制弹出保存对话框
+    """
+    # 获取文件信息
+    result = await db.execute(
+        select(KnowledgeFile).where(KnowledgeFile.dify_document_id == file_id)
+    )
+    knowledge_file = result.scalar_one_or_none()
+    
+    if not knowledge_file:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    
+    filename = knowledge_file.name
+    
+    # 优先从本地文件系统提供文件
+    if knowledge_file.local_path and os.path.exists(knowledge_file.local_path):
+        local_path = Path(knowledge_file.local_path)
+        
+        # 确定 media_type
+        import mimetypes
+        media_type, _ = mimetypes.guess_type(str(local_path))
+        if not media_type:
+            media_type = "application/octet-stream"
+        
+        # RFC 5987 编码文件名（支持中文）
+        from urllib.parse import quote
+        encoded_filename = quote(filename, safe='')
+        
+        content_disposition = f"{disposition}; filename*=UTF-8''{encoded_filename}"
+        
+        return FileResponse(
+            path=str(local_path),
+            filename=filename,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": content_disposition,
+            }
+        )
+    
+    # 兼容旧数据：如果没有本地文件，尝试从 Dify 下载
+    else:
+        config = await _get_knowledge_config(db, knowledge_config_id)
+        
+        try:
+            dify_url = _console_url(
+                config,
+                f"/datasets/{config.knowledge_id}/documents/{file_id}/download",
+            )
+
+            async with aiohttp.ClientSession() as session:
+                headers = {
+                    "Authorization": f"Bearer {config.dify_api_key}",
+                }
+
+                async with session.get(dify_url, headers=headers, allow_redirects=True) as response:
+                    if response.status != 200:
+                        raise HTTPException(
+                            status_code=response.status,
+                            detail=f"Dify 下载失败: {await response.text()}"
+                        )
+
+                    content_type = response.headers.get("Content-Type", "application/octet-stream")
+
+                    # 如果 Dify 没返回文件名，用我们数据库里的原始文件名
+                    content_disp = response.headers.get("Content-Disposition", "")
+                    if "filename" not in content_disp:
+                        # RFC 5987 / RFC 2231 编码，确保中文文件名正确
+                        from urllib.parse import quote
+                        encoded_filename = quote(filename, safe='')
+                        content_disp = f"{disposition}; filename*=UTF-8''{encoded_filename}"
+
+                    return StreamingResponse(
+                        response.content.iter_any(),
+                        media_type=content_type,
+                        headers={
+                            "Content-Disposition": content_disp,
+                            "Content-Length": response.headers.get("Content-Length", ""),
+                        },
+                    )
+
+        except aiohttp.ClientError as e:
+            raise HTTPException(status_code=500, detail=f"连接 Dify 失败: {str(e)}")
 
 
 @router.delete("/knowledge/files/{file_id}")
@@ -150,40 +240,30 @@ async def delete_knowledge_file(
     db: Annotated[AsyncSession, Depends(get_db)],
     knowledge_config_id: uuid.UUID | None = None,
 ):
-    """
-    从知识库删除文件
-    """
-    # 获取知识库配置
+    """从 Dify 知识库删除文件"""
     config = await _get_knowledge_config(db, knowledge_config_id)
 
-    # 调用 Dify API 删除文件
     try:
         async with aiohttp.ClientSession() as session:
             url = f"{config.dify_base_url}/datasets/{config.knowledge_id}/documents/{file_id}"
-            headers = {
-                "Authorization": f"Bearer {config.dify_api_key}",
-            }
+            headers = {"Authorization": f"Bearer {config.dify_api_key}"}
 
             async with session.delete(url, headers=headers) as response:
                 if response.status not in (200, 204):
-                    error_text = await response.text()
                     raise HTTPException(
                         status_code=response.status,
-                        detail=f"删除文件失败: {error_text}"
+                        detail=f"删除 Dify 文件失败: {await response.text()}",
                     )
-                
-                # 删除数据库记录
-                result = await db.execute(
-                    select(KnowledgeFile).where(
-                        KnowledgeFile.dify_document_id == file_id
-                    )
-                )
-                knowledge_file = result.scalar_one_or_none()
-                if knowledge_file:
-                    await db.delete(knowledge_file)
-                    await db.commit()
-                
-                return {"success": True, "message": "文件已删除"}
+
+        result = await db.execute(
+            select(KnowledgeFile).where(KnowledgeFile.dify_document_id == file_id)
+        )
+        knowledge_file = result.scalar_one_or_none()
+        if knowledge_file:
+            await db.delete(knowledge_file)
+            await db.commit()
+
+        return {"success": True, "message": "文件已删除"}
 
     except aiohttp.ClientError as e:
         raise HTTPException(status_code=500, detail=f"连接 Dify 失败: {str(e)}")
@@ -195,40 +275,30 @@ async def search_knowledge_files(
     db: Annotated[AsyncSession, Depends(get_db)],
     knowledge_config_id: uuid.UUID | None = None,
 ):
-    """
-    搜索知识库文件
-    """
-    # 获取知识库配置
+    """搜索知识库文件"""
     config = await _get_knowledge_config(db, knowledge_config_id)
 
-    # 调用 Dify API 搜索文件
     try:
         async with aiohttp.ClientSession() as session:
             url = f"{config.dify_base_url}/datasets/{config.knowledge_id}/documents"
-            headers = {
-                "Authorization": f"Bearer {config.dify_api_key}",
-            }
-            params = {
-                "keyword": q,
-            }
+            headers = {"Authorization": f"Bearer {config.dify_api_key}"}
+            params = {"keyword": q}
 
             async with session.get(url, headers=headers, params=params) as response:
                 if response.status != 200:
-                    error_text = await response.text()
                     raise HTTPException(
                         status_code=response.status,
-                        detail=f"搜索文件失败: {error_text}"
+                        detail=f"搜索文件失败: {await response.text()}",
                     )
 
                 data = await response.json()
-                # 过滤搜索结果
                 items = data.get("data", [])
-                filtered_items = [item for item in items if q.lower() in item.get("name", "").lower()]
+                filtered_items = [
+                    item for item in items
+                    if q.lower() in item.get("name", "").lower()
+                ]
 
-                return {
-                    "items": filtered_items,
-                    "total": len(filtered_items),
-                }
+                return {"items": filtered_items, "total": len(filtered_items)}
 
     except aiohttp.ClientError as e:
         raise HTTPException(status_code=500, detail=f"连接 Dify 失败: {str(e)}")
@@ -238,12 +308,7 @@ async def _get_knowledge_config(
     db: AsyncSession,
     config_id: uuid.UUID | None = None,
 ) -> KnowledgeConfig:
-    """
-    获取知识库配置
-
-    如果指定了 config_id，则获取对应的配置
-    否则获取默认配置
-    """
+    """获取知识库配置"""
     if config_id:
         result = await db.execute(
             select(KnowledgeConfig).where(KnowledgeConfig.id == config_id)
@@ -254,7 +319,6 @@ async def _get_knowledge_config(
         )
 
     config = result.scalar_one_or_none()
-
     if not config:
         raise HTTPException(status_code=404, detail="未找到知识库配置，请先配置知识库")
 

@@ -32,6 +32,8 @@ class KnowledgeFile(Base):
     size: Mapped[int] = mapped_column(Integer, nullable=False)
     # 字数（来自 Dify API）
     word_count: Mapped[int] = mapped_column(Integer, nullable=True)
+    # 本地文件路径
+    local_path: Mapped[str] = mapped_column(String(1000), nullable=True)
     # 上传时间
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
