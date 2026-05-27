@@ -33,8 +33,7 @@ export default function KnowledgePage() {
     }
   }, [searchFiles, fetchFiles])
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
+  const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return
 
     try {
@@ -46,6 +45,23 @@ export default function KnowledgePage() {
     } catch (error) {
       console.error('上传失败:', error)
     }
+  }
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    handleFileUpload(event.target.files)
+  }
+
+  // 阻止拖拽默认行为（防止浏览器打开文件）
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  // 处理文件拖放
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    handleFileUpload(e.dataTransfer.files)
   }
 
   const formatFileSize = (bytes: number | undefined) => {
@@ -243,12 +259,16 @@ export default function KnowledgePage() {
             <h3 className="text-lg font-semibold mb-4">上传文件</h3>
 
             <div className="space-y-4">
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary-500 transition-colors">
+              <div
+                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary-500 transition-colors"
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              >
                 <input
                   type="file"
                   id="file-upload"
                   multiple
-                  onChange={handleFileUpload}
+                  onChange={handleInputChange}
                   className="hidden"
                   accept=".pdf,.doc,.docx,.txt,.md"
                 />

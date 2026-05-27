@@ -1,4 +1,4 @@
-import { Settings, Database, FileText, ChevronLeft } from 'lucide-react'
+import { FileText, ChevronLeft } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { cn } from '@/utils/cn'
 
@@ -40,24 +40,7 @@ export default function TopNav({ onToggleRightPanel }: TopNavProps) {
 
       {/* 右侧 - 操作按钮 */}
       <div className="flex items-center gap-2">
-        <button
-          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          title="知识库配置"
-          onClick={() => {
-            // TODO: 打开知识库配置面板
-          }}
-        >
-          <Database className="w-5 h-5" />
-        </button>
-        <button
-          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          title="设置"
-          onClick={() => {
-            // TODO: 打开设置面板
-          }}
-        >
-          <Settings className="w-5 h-5" />
-        </button>
+        {/* 知识库配置和设置按钮已移除 */}
       </div>
     </header>
   )
