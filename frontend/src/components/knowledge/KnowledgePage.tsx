@@ -18,7 +18,6 @@ export default function KnowledgePage() {
   } = useKnowledgeStore()
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const [showUploadModal, setShowUploadModal] = useState(false)
 
   useEffect(() => {
@@ -49,6 +48,54 @@ export default function KnowledgePage() {
     }
   }
 
+  const formatFileSize = (bytes: number | undefined) => {
+    if (!bytes && bytes !== 0) return '--'
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  }
+
+  // 解析日期（支持 Unix 时间戳和 ISO 字符串）
+  const parseDate = (dateValue: any): Date | null => {
+    if (!dateValue) return null;
+    
+    // 如果是数字（Unix 时间戳）
+    if (typeof dateValue === 'number') {
+      // 如果是秒级时间戳（10位或更少）
+      if (dateValue < 10000000000) {
+        return new Date(dateValue * 1000);
+      }
+      // 如果是毫秒级时间戳（13位）
+      return new Date(dateValue);
+    }
+    
+    // 如果是字符串，尝试解析为 ISO 格式
+    return new Date(dateValue);
+  };
+
+  // 获取状态徽章
+  const getStatusBadge = (status: string | undefined) => {
+    if (!status) return '--';
+    
+    const statusConfig: Record<string, { label: string; color: string }> = {
+      'available': { label: '可用', color: 'bg-green-100 text-green-700' },
+      'indexing': { label: '索引中', color: 'bg-blue-100 text-blue-700' },
+      'queuing': { label: '排队中', color: 'bg-yellow-100 text-yellow-700' },
+      'paused': { label: '已暂停', color: 'bg-orange-100 text-orange-700' },
+      'error': { label: '错误', color: 'bg-red-100 text-red-700' },
+      'disabled': { label: '已禁用', color: 'bg-gray-200 text-gray-500' },
+      'archived': { label: '已归档', color: 'bg-gray-200 text-gray-600' },
+    };
+    
+    const config = statusConfig[status] || { label: status, color: 'bg-gray-100 text-gray-700' };
+    
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${config.color}`}>
+        {config.label}
+      </span>
+    );
+  };
+
   const handleDeleteFile = async (fileId: string) => {
     if (!confirm('确定要删除这个文件吗？')) return
 
@@ -58,24 +105,6 @@ export default function KnowledgePage() {
     } catch (error) {
       console.error('删除失败:', error)
     }
-  }
-
-  const toggleFileSelection = (fileId: string) => {
-    setSelectedFiles(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(fileId)) {
-        newSet.delete(fileId)
-      } else {
-        newSet.add(fileId)
-      }
-      return newSet
-    })
-  }
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   }
 
   return (
@@ -131,21 +160,9 @@ export default function KnowledgePage() {
           <div className="space-y-2">
             {/* 表头 */}
             <div className="grid grid-cols-12 gap-4 px-4 py-2 text-xs font-medium text-gray-500 uppercase">
-              <div className="col-span-1">
-                <input
-                  type="checkbox"
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedFiles(new Set(files.map(f => f.id)))
-                    } else {
-                      setSelectedFiles(new Set())
-                    }
-                  }}
-                  className="rounded border-gray-300"
-                />
-              </div>
-              <div className="col-span-5">文件名</div>
-              <div className="col-span-2">大小</div>
+              <div className="col-span-4">文件名</div>
+              <div className="col-span-2">字符数</div>
+              <div className="col-span-2">状态</div>
               <div className="col-span-2">上传时间</div>
               <div className="col-span-2 text-right">操作</div>
             </div>
@@ -156,16 +173,7 @@ export default function KnowledgePage() {
                 key={file.id}
                 className="grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors items-center"
               >
-                <div className="col-span-1">
-                  <input
-                    type="checkbox"
-                    checked={selectedFiles.has(file.id)}
-                    onChange={() => toggleFileSelection(file.id)}
-                    className="rounded border-gray-300"
-                  />
-                </div>
-
-                <div className="col-span-5 flex items-center gap-3">
+                <div className="col-span-4 flex items-center gap-3">
                   <FileText className="w-5 h-5 text-primary-600 shrink-0" />
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-gray-900 truncate">
@@ -180,11 +188,18 @@ export default function KnowledgePage() {
                 </div>
 
                 <div className="col-span-2 text-sm text-gray-500">
-                  {formatFileSize(file.size)}
+                  {file.word_count?.toLocaleString() || '--'}
                 </div>
 
                 <div className="col-span-2 text-sm text-gray-500">
-                  {format(new Date(file.created_at), 'yyyy/MM/dd HH:mm', { locale: zhCN })}
+                  {getStatusBadge(file.display_status)}
+                </div>
+
+                <div className="col-span-2 text-sm text-gray-500">
+                  {(() => {
+                    const date = parseDate(file.created_at);
+                    return date ? format(date, 'yyyy/MM/dd HH:mm', { locale: zhCN }) : '--';
+                  })()}
                 </div>
 
                 <div className="col-span-2 flex items-center justify-end gap-1">

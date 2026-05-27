@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import String, Boolean, Integer, Float, DateTime
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.engine import Base
 
@@ -37,4 +37,11 @@ class KnowledgeConfig(Base):
         nullable=False,
         default=datetime.utcnow,
         onupdate=datetime.utcnow
+    )
+
+    # 关系
+    knowledge_files: Mapped[list["KnowledgeFile"]] = relationship(
+        "KnowledgeFile",
+        back_populates="knowledge_config",
+        cascade="all, delete-orphan"
     )

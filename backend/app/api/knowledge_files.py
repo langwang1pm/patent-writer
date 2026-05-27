@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.dependencies import get_db
 from app.models.knowledge_config import KnowledgeConfig
+from app.models.knowledge_file import KnowledgeFile
 
 router = APIRouter()
 
@@ -44,9 +46,27 @@ async def list_knowledge_files(
                     )
 
                 data = await response.json()
+                items = data.get("data", [])
+                
+                # 从数据库获取文件大小信息
+                result = await db.execute(
+                    select(KnowledgeFile).where(
+                        KnowledgeFile.knowledge_config_id == config.id
+                    )
+                )
+                file_records = {fr.dify_document_id: fr for fr in result.scalars().all()}
+                
+                # 为每个选项补充 size 字段
+                for item in items:
+                    doc_id = item.get("id")
+                    if doc_id and doc_id in file_records:
+                        item["size"] = file_records[doc_id].size
+                    else:
+                        item["size"] = None
+                
                 return {
-                    "items": data.get("data", []),
-                    "total": len(data.get("data", [])),
+                    "items": items,
+                    "total": len(items),
                 }
 
     except aiohttp.ClientError as e:
@@ -70,12 +90,23 @@ async def upload_knowledge_file(
         async with aiohttp.ClientSession() as session:
             url = f"{config.dify_base_url}/datasets/{config.knowledge_id}/document/create_by_file"
 
+            # 获取原始文件名（FastAPI 已经正确解码了 multipart 中的 filename）
+            raw_filename = file.filename or 'upload'
+            
+            # 获取文件大小
+            file_size = 0
+            file_content = await file.read()
+            file_size = len(file_content)
+
             # 准备表单数据
-            form_data = aiohttp.FormData()
+            # 关键：aiohttp.FormData 在处理非 ASCII filename 时会进行 percent-encode
+            # 但 Dify 接收后不解码，导致显示的是编码后的字符串
+            # 解决方案：使用 quote_fields=False 禁止自动编码
+            form_data = aiohttp.FormData(quote_fields=False)
             form_data.add_field(
                 'file',
-                await file.read(),
-                filename=file.filename,
+                file_content,
+                filename=raw_filename,
                 content_type=file.content_type
             )
             form_data.add_field('data', '{"indexing_technique":"high_quality","process_rule":{"mode":"automatic"}}')
@@ -93,6 +124,20 @@ async def upload_knowledge_file(
                     )
 
                 data = await response.json()
+                
+                # 保存到数据库
+                if data and 'document' in data:
+                    doc = data['document']
+                    knowledge_file = KnowledgeFile(
+                        dify_document_id=doc['id'],
+                        knowledge_config_id=config.id,
+                        name=doc.get('name', raw_filename),
+                        size=file_size,
+                        word_count=doc.get('word_count'),
+                    )
+                    db.add(knowledge_file)
+                    await db.commit()
+                
                 return data
 
     except aiohttp.ClientError as e:
@@ -126,7 +171,18 @@ async def delete_knowledge_file(
                         status_code=response.status,
                         detail=f"删除文件失败: {error_text}"
                     )
-
+                
+                # 删除数据库记录
+                result = await db.execute(
+                    select(KnowledgeFile).where(
+                        KnowledgeFile.dify_document_id == file_id
+                    )
+                )
+                knowledge_file = result.scalar_one_or_none()
+                if knowledge_file:
+                    await db.delete(knowledge_file)
+                    await db.commit()
+                
                 return {"success": True, "message": "文件已删除"}
 
     except aiohttp.ClientError as e:
