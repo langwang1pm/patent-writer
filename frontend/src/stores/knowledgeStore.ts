@@ -1,8 +1,7 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { KnowledgeFile, KnowledgeState } from '@/types/knowledge'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+import { knowledgeApi } from '@/services/knowledgeApi'
 
 export const useKnowledgeStore = create<KnowledgeState>()(
   devtools((set, get) => ({
@@ -14,17 +13,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
     fetchFiles: async () => {
       set({ isLoading: true, error: null })
       try {
-        const response = await fetch(`${API_BASE_URL}/api/knowledge/files`, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error('获取文件列表失败')
-        }
-
-        const data = await response.json()
+        const data = await knowledgeApi.listFiles()
         set({ files: data.items || [], isLoading: false })
       } catch (error) {
         console.error('获取文件列表失败:', error)
@@ -35,25 +24,10 @@ export const useKnowledgeStore = create<KnowledgeState>()(
       }
     },
 
-    uploadFile: async (file: File, description?: string) => {
+    uploadFile: async (file: File) => {
       set({ isUploading: true, error: null })
       try {
-        const formData = new FormData()
-        formData.append('file', file)
-        if (description) {
-          formData.append('description', description)
-        }
-
-        const response = await fetch(`${API_BASE_URL}/api/knowledge/files/upload`, {
-          method: 'POST',
-          body: formData,
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.detail || '上传失败')
-        }
-
+        await knowledgeApi.uploadFile(file)
         set({ isUploading: false })
       } catch (error) {
         console.error('上传文件失败:', error)
@@ -68,15 +42,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
     deleteFile: async (fileId: string) => {
       set({ error: null })
       try {
-        const response = await fetch(`${API_BASE_URL}/api/knowledge/files/${fileId}`, {
-          method: 'DELETE',
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.detail || '删除失败')
-        }
-
+        await knowledgeApi.deleteFile(fileId)
         // 从列表中移除
         set((state) => ({
           files: state.files.filter((f) => f.id !== fileId),
@@ -93,20 +59,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
     searchFiles: async (query: string) => {
       set({ isLoading: true, error: null })
       try {
-        const response = await fetch(
-          `${API_BASE_URL}/api/knowledge/files/search?q=${encodeURIComponent(query)}`,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }
-        )
-
-        if (!response.ok) {
-          throw new Error('搜索失败')
-        }
-
-        const data = await response.json()
+        const data = await knowledgeApi.searchFiles(query)
         set({ files: data.items || [], isLoading: false })
       } catch (error) {
         console.error('搜索文件失败:', error)
