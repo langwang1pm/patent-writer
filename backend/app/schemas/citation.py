@@ -1,7 +1,7 @@
 """引用相关 Pydantic Schema"""
-from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel
+from app.schemas._datetime import CstDatetime
 
 
 class CitationBase(BaseModel):
@@ -30,7 +30,7 @@ class CitationResponse(CitationBase):
     score: float | None = None
     position_start: int | None = None
     position_end: int | None = None
-    created_at: datetime
+    created_at: CstDatetime
 
     model_config = {"from_attributes": True}
 

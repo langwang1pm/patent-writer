@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Plus, Search, MessageSquare, MoreVertical, Trash2, Edit2, BookOpen } from 'lucide-react'
-import { format } from 'date-fns'
+import { Plus, Search, MessageSquare, MoreVertical, Trash2, Edit2, BookOpen, Loader2 } from 'lucide-react'
+import { format, toZonedTime } from 'date-fns-tz'
 import { zhCN } from 'date-fns/locale'
 import { cn } from '@/utils/cn'
 import { useConversationStore } from '@/stores/conversationStore'
@@ -9,9 +9,12 @@ import { useConversationStore } from '@/stores/conversationStore'
 export default function Sidebar() {
   const navigate = useNavigate()
   const params = useParams()
-  const { conversations, fetchConversations, createConversation, deleteConversation, setCurrentConversation, currentConversationId } = useConversationStore()
+  const { conversations, fetchConversations, createConversation, deleteConversation, setCurrentConversation, currentConversationId, updateConversationTitle } = useConversationStore()
   const [searchQuery, setSearchQuery] = useState('')
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const editInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchConversations()
@@ -24,14 +27,51 @@ export default function Sidebar() {
     }
   }, [params.conversationId, setCurrentConversation])
 
+  const [isCreating, setIsCreating] = useState(false)
+
   const handleCreateConversation = async () => {
+    if (isCreating) return
+    setIsCreating(true)
     try {
       const conversation = await createConversation()
       navigate(`/chat/${conversation.id}`)
     } catch (error) {
       console.error('创建对话失败:', error)
+    } finally {
+      setIsCreating(false)
     }
   }
+
+  const startRename = (id: string, currentTitle: string) => {
+    setRenamingId(id)
+    setEditTitle(currentTitle)
+  }
+
+  const confirmRename = async () => {
+    if (!renamingId || !editTitle.trim()) {
+      setRenamingId(null)
+      return
+    }
+    try {
+      await updateConversationTitle(renamingId, editTitle.trim())
+    } catch (error) {
+      console.error('重命名失败:', error)
+    }
+    setRenamingId(null)
+  }
+
+  const cancelRename = () => {
+    setRenamingId(null)
+    setEditTitle('')
+  }
+
+  // 重命名时自动聚焦
+  useEffect(() => {
+    if (renamingId && editInputRef.current) {
+      editInputRef.current.focus()
+      editInputRef.current.select()
+    }
+  }, [renamingId])
 
   const filteredConversations = conversations.filter((c) =>
     c.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -51,10 +91,15 @@ export default function Sidebar() {
 
         <button
           onClick={handleCreateConversation}
-          className="w-full flex items-center gap-2 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          disabled={isCreating}
+          className='w-full flex items-center gap-2 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:bg-primary-400 disabled:cursor-not-allowed'
         >
-          <Plus className="w-4 h-4" />
-          <span>新建文档</span>
+          {isCreating ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
+          <span>{isCreating ? '创建中...' : '新建文档'}</span>
         </button>
 
         {/* 搜索框 */}
@@ -94,11 +139,26 @@ export default function Sidebar() {
                 <div className="flex items-start gap-2">
                   <MessageSquare className={cn('w-4 h-4 mt-0.5 shrink-0', currentConversationId === conversation.id ? 'text-primary-600' : 'text-gray-400')} />
                   <div className="flex-1 min-w-0">
-                    <div className={cn('text-sm font-medium truncate', currentConversationId === conversation.id ? 'text-primary-700' : 'text-gray-700')}>
-                      {conversation.title}
-                    </div>
+                    {renamingId === conversation.id ? (
+                      <input
+                        ref={editInputRef}
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onBlur={confirmRename}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') confirmRename()
+                          if (e.key === 'Escape') cancelRename()
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full text-sm font-medium bg-white border border-primary-300 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    ) : (
+                      <div className={cn('text-sm font-medium truncate', currentConversationId === conversation.id ? 'text-primary-700' : 'text-gray-700')}>
+                        {conversation.title}
+                      </div>
+                    )}
                     <div className="text-xs text-gray-500 mt-0.5">
-                      {format(new Date(conversation.updated_at), 'MM/dd HH:mm', { locale: zhCN })}
+                      {format(toZonedTime(new Date(conversation.updated_at), Intl.DateTimeFormat().resolvedOptions().timeZone), 'MM/dd HH:mm', { locale: zhCN })}
                     </div>
                   </div>
                 </div>
@@ -114,7 +174,7 @@ export default function Sidebar() {
                     className="p-1 text-gray-400 hover:text-gray-600 rounded"
                     onClick={(e) => {
                       e.stopPropagation()
-                      // TODO: 重命名
+                      startRename(conversation.id, conversation.title)
                     }}
                   >
                     <Edit2 className="w-3 h-3" />

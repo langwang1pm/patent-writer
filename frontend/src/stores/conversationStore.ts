@@ -109,6 +109,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         ],
         isStreaming: false,
       }))
+
+      // 刷新对话列表，获取后端可能自动生成的标题
+      await get().fetchConversations()
     } catch (error) {
       set({ error: (error as Error).message, isStreaming: false })
     }

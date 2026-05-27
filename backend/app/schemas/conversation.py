@@ -2,6 +2,7 @@
 from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, Field
+from app.schemas._datetime import CstDatetime
 
 
 class MessageBase(BaseModel):
@@ -20,7 +21,7 @@ class MessageResponse(MessageBase):
     id: UUID
     conversation_id: UUID
     document_id: UUID | None = None
-    created_at: datetime
+    created_at: CstDatetime
 
     model_config = {"from_attributes": True}
 
@@ -49,8 +50,8 @@ class ConversationResponse(ConversationBase):
     """对话响应"""
     id: UUID
     knowledge_config_id: UUID | None = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: CstDatetime
+    updated_at: CstDatetime
 
     model_config = {"from_attributes": True}
 

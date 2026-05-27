@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
-import { Send, FileText } from 'lucide-react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { Send, FileText, Plus } from 'lucide-react'
 import { useConversationStore } from '@/stores/conversationStore'
 import { useKnowledgeStore } from '@/stores/knowledgeStore'
 import { documentApi } from '@/services/documentApi'
 import { cn } from '@/utils/cn'
 
 export default function ChatView() {
+  const navigate = useNavigate()
   const { conversationId } = useParams()
-  const { messages, currentConversationId, isLoading, isStreaming, sendMessage, setCurrentConversation } = useConversationStore()
+  const { messages, currentConversationId, isLoading, isStreaming, sendMessage, setCurrentConversation, createConversation } = useConversationStore()
   const { currentConfigId } = useKnowledgeStore()
   const [inputValue, setInputValue] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -33,6 +34,15 @@ export default function ChatView() {
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`
     }
   }, [inputValue])
+
+  const handleQuickCreate = async () => {
+    try {
+      const conversation = await createConversation()
+      navigate(`/chat/${conversation.id}`)
+    } catch (error) {
+      console.error('创建对话失败:', error)
+    }
+  }
 
   const handleSend = async () => {
     if (!inputValue.trim() || isStreaming) return
@@ -75,9 +85,13 @@ export default function ChatView() {
         <p className="text-gray-500 max-w-md">
           通过对话方式让 AI 辅助编写专利文档，实时引用知识库内容，保证文档的专业性和可溯源性。
         </p>
-        <div className="mt-6 text-sm text-gray-400">
-          点击左侧「新建对话」开始使用
-        </div>
+        <button
+          onClick={handleQuickCreate}
+          className="mt-6 px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors inline-flex items-center gap-2 text-sm font-medium"
+        >
+          <Plus className="w-4 h-4" />
+          开始新文档
+        </button>
       </div>
     )
   }

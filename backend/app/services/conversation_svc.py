@@ -2,6 +2,7 @@
 import uuid
 import structlog
 from datetime import datetime
+from app.models import now_cst
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -100,7 +101,7 @@ class ConversationService:
         content: str,
         document_id: uuid.UUID | None = None,
     ) -> Message:
-        """添加消息"""
+        """添加消息，首条用户消息自动生成对话标题"""
         message = Message(
             conversation_id=conversation_id,
             role=role,
@@ -111,10 +112,30 @@ class ConversationService:
         await self.db.flush()
         await self.db.refresh(message)
 
-        # 更新对话的 updated_at
+        # 更新对话的 updated_at，并检查是否需要自动生成标题
         conversation = await self.get_conversation(conversation_id)
         if conversation:
-            conversation.updated_at = datetime.utcnow()
+            conversation.updated_at = now_cst()
+
+            # 首条用户消息 → 自动生成标题
+            if role == 'user' and conversation.title == '新对话':
+                count_result = await self.db.execute(
+                    select(func.count(Message.id)).where(
+                        Message.conversation_id == conversation_id,
+                        Message.role == 'user',
+                    )
+                )
+                user_msg_count = count_result.scalar()
+                if user_msg_count == 1:
+                    # 取消息前 30 个字符作为标题，去掉换行
+                    auto_title = content[:30].replace('\n', ' ').strip()
+                    if auto_title:
+                        conversation.title = auto_title
+                        logger.info(
+                            'conversation_title_auto_generated',
+                            conversation_id=str(conversation_id),
+                            title=auto_title,
+                        )
 
         return message
 

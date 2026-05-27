@@ -1,7 +1,7 @@
 """知识库配置相关 Pydantic Schema"""
-from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, Field, HttpUrl
+from app.schemas._datetime import CstDatetime
 
 
 class KnowledgeConfigBase(BaseModel):
@@ -38,8 +38,8 @@ class KnowledgeConfigResponse(KnowledgeConfigBase):
     id: UUID
     is_default: bool
     status: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: CstDatetime
+    updated_at: CstDatetime
 
     model_config = {"from_attributes": True}
 

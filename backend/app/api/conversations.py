@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.dependencies import get_db
 from app.models.conversation import Conversation, Message
+from app.models import now_cst
 from app.models.document import Document
 from app.schemas.conversation import (
     ConversationCreate,
@@ -227,6 +228,22 @@ async def send_message(
         content=data.content,
     )
     db.add(user_message)
+    await db.flush()
+
+    # 首条用户消息 → 自动生成标题
+    if conversation.title == '新对话':
+        count_result = await db.execute(
+            select(func.count(Message.id)).where(
+                Message.conversation_id == conversation_id,
+                Message.role == 'user',
+            )
+        )
+        if count_result.scalar() == 1:
+            auto_title = data.content[:30].replace(chr(10), ' ').strip()
+            if auto_title:
+                conversation.title = auto_title
+
+    conversation.updated_at = now_cst()
 
     # TODO: 调用 Dify 检索 + LLM 生成
     # 模拟 AI 回复

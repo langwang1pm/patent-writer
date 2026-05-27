@@ -1,7 +1,7 @@
 """文档相关 Pydantic Schema"""
-from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, Field
+from app.schemas._datetime import CstDatetime
 
 
 class DocumentBase(BaseModel):
@@ -28,8 +28,8 @@ class DocumentResponse(DocumentBase):
     conversation_id: UUID
     content_markdown: str | None = None
     version: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: CstDatetime
+    updated_at: CstDatetime
     citation_count: int = 0
 
     model_config = {"from_attributes": True}
@@ -46,7 +46,7 @@ class DocumentPreview(BaseModel):
     title: str
     preview: str = ""
     citation_count: int = 0
-    created_at: datetime
+    created_at: CstDatetime
 
     model_config = {"from_attributes": True}
 
