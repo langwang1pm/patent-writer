@@ -1,300 +1,224 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Upload, Search, FileText, Trash2, Download, Eye, MoreVertical, Plus, Loader2 } from 'lucide-react'
-import { format } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
+﻿import { useState, useEffect, useCallback, useMemo } from 'react'
+import {
+  Upload, Search, FileText, Trash2, Loader2,
+  CheckCircle, Clock, AlertCircle, PauseCircle,
+  Eye, Download,
+} from 'lucide-react'
 import { useKnowledgeStore } from '@/stores/knowledgeStore'
+import { knowledgeApi } from '@/services/knowledgeApi'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import type { KnowledgeConfigListResponse } from '@/types/knowledge'
+
+const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = {
+  available:  { label: '可用', color: 'text-green-700 bg-green-50',  icon: CheckCircle },
+  indexing:  { label: '处理中', color: 'text-yellow-700 bg-yellow-50', icon: Clock },
+  queuing:   { label: '排队中', color: 'text-gray-600 bg-gray-50',    icon: Clock },
+  paused:    { label: '已暂停', color: 'text-orange-700 bg-orange-50', icon: PauseCircle },
+  error:     { label: '失败',   color: 'text-red-700 bg-red-50',     icon: AlertCircle },
+  disabled:  { label: '已禁用', color: 'text-gray-400 bg-gray-100',   icon: PauseCircle },
+  archived:  { label: '已归档', color: 'text-gray-400 bg-gray-100',   icon: PauseCircle },
+}
 
 export default function KnowledgePage() {
   const {
-    files,
-    isLoading,
-    isUploading,
-    fetchFiles,
-    uploadFile,
-    deleteFile,
-    searchFiles,
+    files, isLoading, isUploading, error,
+    fetchFiles, uploadFile, deleteFile, searchFiles, clearError,
   } = useKnowledgeStore()
 
   const [searchQuery, setSearchQuery] = useState('')
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [configs, setConfigs] = useState<KnowledgeConfigListResponse | null>(null)
 
+  // 获取配置列表，拿到默认 config id
   useEffect(() => {
-    fetchFiles()
-  }, [fetchFiles])
+    knowledgeApi.listConfigs().then(setConfigs).catch(() => setConfigs(null))
+  }, [])
 
-  const handleSearch = useCallback((query: string) => {
-    setSearchQuery(query)
-    if (query.trim()) {
-      searchFiles(query)
-    } else {
-      fetchFiles()
-    }
+  const defaultConfigId = configs?.default_id ?? configs?.items?.[0]?.id ?? undefined
+
+  useEffect(() => { fetchFiles() }, [fetchFiles])
+  useEffect(() => { if (error) clearError() }, [error, clearError])
+
+  const handleSearch = useCallback((q: string) => {
+    setSearchQuery(q)
+    q.trim() ? searchFiles(q) : fetchFiles()
   }, [searchFiles, fetchFiles])
 
-  const handleFileUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return
-
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = e.target.files
+    if (!list?.length) return
     try {
-      for (const file of Array.from(files)) {
-        await uploadFile(file)
-      }
+      for (const f of Array.from(list)) await uploadFile(f)
       setShowUploadModal(false)
       await fetchFiles()
-    } catch (error) {
-      console.error('上传失败:', error)
-    }
+    } catch { /* store 已处理 error */ }
+    e.target.value = ''
   }
 
-  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload(event.target.files)
+  const handleDelete = async (fileId: string, name: string) => {
+    if (!confirm(`确定删除「${name}」吗？`)) return
+    try { await deleteFile(fileId) } catch {}
   }
 
-  // 阻止拖拽默认行为（防止浏览器打开文件）
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const fmtDate = (ts: any) => {
+    if (!ts) return '-'
+    const ms = typeof ts === 'string' && ts.length > 10 ? Date.parse(ts) : Number(ts) * 1000
+    return new Date(ms).toLocaleString('zh-CN', {
+      year:'numeric', month:'2-digit', day:'2-digit',
+      hour:'2-digit', minute:'2-digit',
+    })
   }
 
-  // 处理文件拖放
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    handleFileUpload(e.dataTransfer.files)
-  }
-
-  const formatFileSize = (bytes: number | undefined) => {
-    if (!bytes && bytes !== 0) return '--'
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-  }
-
-  // 解析日期（支持 Unix 时间戳和 ISO 字符串）
-  const parseDate = (dateValue: any): Date | null => {
-    if (!dateValue) return null;
-    
-    // 如果是数字（Unix 时间戳）
-    if (typeof dateValue === 'number') {
-      // 如果是秒级时间戳（10位或更少）
-      if (dateValue < 10000000000) {
-        return new Date(dateValue * 1000);
-      }
-      // 如果是毫秒级时间戳（13位）
-      return new Date(dateValue);
-    }
-    
-    // 如果是字符串，尝试解析为 ISO 格式
-    return new Date(dateValue);
-  };
-
-  // 获取状态徽章
-  const getStatusBadge = (status: string | undefined) => {
-    if (!status) return '--';
-    
-    const statusConfig: Record<string, { label: string; color: string }> = {
-      'available': { label: '可用', color: 'bg-green-100 text-green-700' },
-      'indexing': { label: '索引中', color: 'bg-blue-100 text-blue-700' },
-      'queuing': { label: '排队中', color: 'bg-yellow-100 text-yellow-700' },
-      'paused': { label: '已暂停', color: 'bg-orange-100 text-orange-700' },
-      'error': { label: '错误', color: 'bg-red-100 text-red-700' },
-      'disabled': { label: '已禁用', color: 'bg-gray-200 text-gray-500' },
-      'archived': { label: '已归档', color: 'bg-gray-200 text-gray-600' },
-    };
-    
-    const config = statusConfig[status] || { label: status, color: 'bg-gray-100 text-gray-700' };
-    
-    return (
-      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${config.color}`}>
-        {config.label}
-      </span>
-    );
-  };
-
-  const handleDeleteFile = async (fileId: string) => {
-    if (!confirm('确定要删除这个文件吗？')) return
-
-    try {
-      await deleteFile(fileId)
-      await fetchFiles()
-    } catch (error) {
-      console.error('删除失败:', error)
-    }
+  const fmtCount = (n: number | undefined) => {
+    if (n == null) return '-'
+    if (n >= 10000) return `${(n / 10000).toFixed(1)}万字`
+    if (n >= 1000)  return `${(n / 1000).toFixed(1)}k`
+    return `${n}`
   }
 
   return (
     <div className="h-full flex flex-col bg-white">
       {/* 顶部操作栏 */}
-      <div className="border-b border-gray-200 p-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900 shrink-0">知识库</h1>
-          
-          <div className="flex items-center gap-4">
-            {/* 搜索框 */}
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                type="text"
-                placeholder="搜索文件..."
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            <Button
-              onClick={() => setShowUploadModal(true)}
-              disabled={isUploading}
-              className="shrink-0"
-            >
-              {isUploading ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Plus className="w-4 h-4 mr-2" />
-              )}
-              上传文件
-            </Button>
+      <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
+        <h1 className="text-xl font-semibold text-gray-900">知识库</h1>
+        <div className="flex items-center gap-3">
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <Input
+              type="text" placeholder="搜索文件名..."
+              value={searchQuery}
+              onChange={e => handleSearch(e.target.value)}
+              className="pl-9"
+            />
           </div>
+          <Button onClick={() => setShowUploadModal(true)} disabled={isUploading}>
+            {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                             : <Upload className="w-4 h-4 mr-2" />}
+            上传文件
+          </Button>
         </div>
       </div>
 
+      {/* 错误提示 */}
+      {error && (
+        <div className="mx-6 mt-3 px-4 py-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+          {error}
+        </div>
+      )}
+
       {/* 文件列表 */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto px-6 py-4">
         {isLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+          <div className="flex items-center justify-center h-64 text-gray-400">
+            <Loader2 className="w-6 h-6 animate-spin mr-2" />加载中...
           </div>
         ) : files.length === 0 ? (
-          <div className="text-center py-16">
-            <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 text-sm">
-              {searchQuery ? '未找到匹配的文件' : '暂无文件，点击上方按钮上传'}
+          <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+            <FileText className="w-12 h-12 mb-3 text-gray-300" />
+            <p className="text-sm">
+              {searchQuery ? '未找到匹配的文件' : '暂无文件，点击「上传文件」开始添加'}
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-1">
             {/* 表头 */}
-            <div className="grid grid-cols-12 gap-4 px-4 py-2 text-xs font-medium text-gray-500 uppercase">
+            <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-gray-500 uppercase">
               <div className="col-span-4">文件名</div>
-              <div className="col-span-2">字符数</div>
-              <div className="col-span-2">状态</div>
-              <div className="col-span-2">上传时间</div>
+              <div className="col-span-2 text-center">字符数</div>
+              <div className="col-span-2 text-center">状态</div>
+              <div className="col-span-2 text-center">上传时间</div>
               <div className="col-span-2 text-right">操作</div>
             </div>
 
-            {/* 文件列表 */}
-            {files.map((file) => (
-              <div
-                key={file.id}
-                className="grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors items-center"
-              >
-                <div className="col-span-4 flex items-center gap-3">
-                  <FileText className="w-5 h-5 text-primary-600 shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">
+            {files.map((file: any) => {
+              const st = (file.display_status || 'queuing') as string
+              const info = STATUS_MAP[st] || STATUS_MAP.queuing
+              const StatusIcon = info.icon
+              const fileUrl = knowledgeApi.getFileUrl(file.id, 'inline')
+              const dlUrl   = knowledgeApi.getFileUrl(file.id, 'attachment')
+              return (
+                <div key={file.id}
+                     className="grid grid-cols-12 gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors items-center">
+                  {/* 文件名 */}
+                  <div className="col-span-4 flex items-center gap-3 min-w-0">
+                    <FileText className="w-5 h-5 text-primary-600 shrink-0" />
+                    <span className="text-sm text-gray-900 truncate" title={file.name}>
                       {file.name}
-                    </div>
-                    {file.description && (
-                      <div className="text-xs text-gray-500 truncate">
-                        {file.description}
-                      </div>
-                    )}
+                    </span>
+                  </div>
+
+                  {/* 字数 */}
+                  <div className="col-span-2 text-center text-sm text-gray-500">
+                    {file.word_count?.toLocaleString() ?? '--'}
+                  </div>
+
+                  {/* 状态 */}
+                  <div className="col-span-2 flex justify-center">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${info.color}`}>
+                      <StatusIcon className="w-3 h-3" />
+                      {info.label}
+                    </span>
+                  </div>
+
+                  {/* 上传时间 */}
+                  <div className="col-span-2 text-center text-sm text-gray-500">
+                    {fmtDate(file.created_at)}
+                  </div>
+
+                  {/* 操作 */}
+                  <div className="col-span-2 flex justify-end gap-1">
+                    {/* 查看/预览 */}
+                    <a href={fileUrl} target="_blank" rel="noreferrer"
+                       className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-white rounded transition-colors"
+                       title="查看">
+                      <Eye className="w-4 h-4" />
+                    </a>
+                    {/* 下载 */}
+                    <a href={dlUrl} download={file.name}
+                       className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-white rounded transition-colors"
+                       title="下载">
+                      <Download className="w-4 h-4" />
+                    </a>
+                    {/* 删除 */}
+                    <button
+                      onClick={() => handleDelete(file.id, file.name)}
+                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white rounded transition-colors"
+                      title="删除">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-
-                <div className="col-span-2 text-sm text-gray-500">
-                  {file.word_count?.toLocaleString() || '--'}
-                </div>
-
-                <div className="col-span-2 text-sm text-gray-500">
-                  {getStatusBadge(file.display_status)}
-                </div>
-
-                <div className="col-span-2 text-sm text-gray-500">
-                  {(() => {
-                    const date = parseDate(file.created_at);
-                    return date ? format(date, 'yyyy/MM/dd HH:mm', { locale: zhCN }) : '--';
-                  })()}
-                </div>
-
-                <div className="col-span-2 flex items-center justify-end gap-1">
-                  <button
-                    onClick={() => window.open(`/api/v1/knowledge/files/${file.id}/download?disposition=inline`, '_blank')}
-                    className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-white rounded transition-colors"
-                    title="查看"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      const link = document.createElement('a')
-                      link.href = `/api/v1/knowledge/files/${file.id}/download?disposition=attachment`
-                      link.download = file.name
-                      link.click()
-                    }}
-                    className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-white rounded transition-colors"
-                    title="下载"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteFile(file.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white rounded transition-colors"
-                    title="删除"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
 
-      {/* 上传文件模态框 */}
+      {/* 上传模态框 */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 max-w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">上传文件</h3>
-
-            <div className="space-y-4">
-              <div
-                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary-500 transition-colors"
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-              >
-                <input
-                  type="file"
-                  id="file-upload"
-                  multiple
-                  onChange={handleInputChange}
-                  className="hidden"
-                  accept=".pdf,.doc,.docx,.txt,.md"
-                />
-                <label
-                  htmlFor="file-upload"
-                  className="cursor-pointer"
-                >
-                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-600">
-                    点击选择文件或拖拽到此处
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    支持 PDF、Word、TXT、Markdown 格式
-                  </p>
-                </label>
-              </div>
-
-              <div className="flex gap-2 justify-end">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setShowUploadModal(false)}
-                >
-                  取消
-                </Button>
-              </div>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-96 max-w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold mb-4">上传文件到知识库</h3>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary-500 transition-colors cursor-pointer">
+              <input
+                type="file" id="knowledge-file-upload" multiple
+                onChange={handleUpload}
+                className="hidden"
+                accept=".pdf,.doc,.docx,.txt,.md,.html,.csv,.xlsx,.pptx"
+              />
+              <label htmlFor="knowledge-file-upload" className="cursor-pointer">
+                <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                <p className="text-sm text-gray-600">点击选择文件，或拖拽到此处</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  支持 PDF、Word、TXT、Markdown、HTML、CSV、Excel、PPT
+                </p>
+              </label>
+            </div>
+            <div className="flex gap-2 justify-end mt-4">
+              <Button type="button" variant="secondary" onClick={() => setShowUploadModal(false)}>
+                取消
+              </Button>
             </div>
           </div>
         </div>

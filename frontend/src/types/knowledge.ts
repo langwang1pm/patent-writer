@@ -5,6 +5,7 @@ export interface KnowledgeFile {
   word_count: number
   hit_count: number
   indexing_status: 'waiting' | 'indexing' | 'completed' | 'error' | 'paused'
+  display_status: 'queuing' | 'indexing' | 'paused' | 'error' | 'available' | 'disabled' | 'archived'
   enabled: boolean
   disabled_at: string | null
   archived: boolean

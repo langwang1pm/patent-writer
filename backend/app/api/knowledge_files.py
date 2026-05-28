@@ -3,7 +3,7 @@ import uuid
 import aiohttp
 import os
 from pathlib import Path
-from typing import Annotated
+from annotated import Annotated
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
