@@ -3,7 +3,7 @@ import uuid
 import aiohttp
 import os
 from pathlib import Path
-from annotated import Annotated
+from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,7 +40,7 @@ async def list_knowledge_files(
 
     try:
         async with aiohttp.ClientSession() as session:
-            url = f"{config.dify_base_url}/datasets/{config.knowledge_id}/documents"
+            url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/documents"
             headers = {"Authorization": f"Bearer {config.dify_api_key}"}
 
             async with session.get(url, headers=headers) as response:
@@ -95,16 +95,20 @@ async def upload_knowledge_file(
 
     try:
         async with aiohttp.ClientSession() as session:
-            url = f"{config.dify_base_url}/datasets/{config.knowledge_id}/document/create_by_file"
+            url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/document/create_by_file"
             form_data = aiohttp.FormData(quote_fields=False)
             form_data.add_field(
                 "file", file_content,
                 filename=raw_filename,
                 content_type=file.content_type or "application/octet-stream",
             )
+            # 根据配置的索引模式决定上传参数
+            # economy: 关键词匹配，无需 Embedding 模型
+            # high_quality: 向量检索，需要 Embedding 模型已配置
+            indexing_technique = getattr(config, 'indexing_technique', 'economy') or 'economy'
             form_data.add_field(
                 "data",
-                '{"indexing_technique":"high_quality","process_rule":{"mode":"automatic"}}',
+                f'{{"indexing_technique":"{indexing_technique}","process_rule":{{"mode":"automatic"}}}}',
             )
             headers = {"Authorization": f"Bearer {config.dify_api_key}"}
 
@@ -245,7 +249,7 @@ async def delete_knowledge_file(
 
     try:
         async with aiohttp.ClientSession() as session:
-            url = f"{config.dify_base_url}/datasets/{config.knowledge_id}/documents/{file_id}"
+            url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/documents/{file_id}"
             headers = {"Authorization": f"Bearer {config.dify_api_key}"}
 
             async with session.delete(url, headers=headers) as response:
@@ -280,7 +284,7 @@ async def search_knowledge_files(
 
     try:
         async with aiohttp.ClientSession() as session:
-            url = f"{config.dify_base_url}/datasets/{config.knowledge_id}/documents"
+            url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/documents"
             headers = {"Authorization": f"Bearer {config.dify_api_key}"}
             params = {"keyword": q}
 

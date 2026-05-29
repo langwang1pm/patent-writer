@@ -13,6 +13,8 @@ function App() {
           <Route path="document/:documentId" element={<DocumentPage />} />
           <Route path="knowledge" element={<KnowledgePage />} />
         </Route>
+        {/* OnlyOffice 全屏预览（不在 AppLayout 内） */}
+        <Route path="/preview" element={<PreviewPage />} />
       </Routes>
     </BrowserRouter>
   )
@@ -42,6 +44,15 @@ const KnowledgePage = () => {
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full"></div></div>}>
       <KnowledgeView />
+    </Suspense>
+  )
+}
+
+const PreviewPage = () => {
+  const OnlyOfficeViewer = lazy(() => import('./components/preview/OnlyOfficeViewer'))
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full"></div></div>}>
+      <OnlyOfficeViewer />
     </Suspense>
   )
 }

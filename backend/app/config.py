@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 4096
     stream_enabled: bool = True
 
+    # OnlyOffice Document Server 配置
+    onlyoffice_doc_server_url: str = "http://localhost:8080"  # OnlyOffice 文档服务器地址（前端访问）
+    onlyoffice_secret: str = ""  # JWT 密钥（留空则不签名）
+    onlyoffice_callback_url: str = "http://localhost:8000"  # OnlyOffice 回调地址（Document Server 访问后端的地址）
+
     # 应用配置
     app_port: int = 8000
     app_host: str = "0.0.0.0"

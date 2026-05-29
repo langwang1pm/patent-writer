@@ -35,6 +35,7 @@ class KnowledgeConfig(Base):
     top_k: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     score_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.7)
     rerank_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    indexing_technique: Mapped[str] = mapped_column(String(20), nullable=False, default="economy", comment="索引模式: economy(关键词) | high_quality(向量Embedding)")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

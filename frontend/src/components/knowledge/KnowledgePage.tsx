@@ -2,7 +2,7 @@
 import {
   Upload, Search, FileText, Trash2, Loader2,
   CheckCircle, Clock, AlertCircle, PauseCircle,
-  Eye, Download,
+  Eye, Download, FileSpreadsheet, Presentation,
 } from 'lucide-react'
 import { useKnowledgeStore } from '@/stores/knowledgeStore'
 import { knowledgeApi } from '@/services/knowledgeApi'
@@ -18,6 +18,37 @@ const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = 
   error:     { label: '失败',   color: 'text-red-700 bg-red-50',     icon: AlertCircle },
   disabled:  { label: '已禁用', color: 'text-gray-400 bg-gray-100',   icon: PauseCircle },
   archived:  { label: '已归档', color: 'text-gray-400 bg-gray-100',   icon: PauseCircle },
+}
+
+/** 判断文件是否需要通过 OnlyOffice 预览 */
+const ONLYOFFICE_EXTENSIONS = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'csv'])
+
+function isOnlyOfficeFile(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+  return ONLYOFFICE_EXTENSIONS.has(ext)
+}
+
+/** 获取文件图标 */
+function getFileIcon(filename: string) {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return FileSpreadsheet
+  if (['ppt', 'pptx'].includes(ext)) return Presentation
+  return FileText
+}
+
+/** 打开文件预览 */
+function openFilePreview(file: any) {
+  const filename = file.name || ''
+  if (isOnlyOfficeFile(filename)) {
+    // Office 文件 -> OnlyOffice 预览页
+    const fileKey = `kb:${file.id}`
+    const url = `/preview?fileKey=${encodeURIComponent(fileKey)}&fileName=${encodeURIComponent(filename)}&mode=view`
+    window.open(url, '_blank')
+  } else {
+    // PDF/MD/TXT 等 -> 浏览器原生预览
+    const fileUrl = knowledgeApi.getFileUrl(file.id, 'inline')
+    window.open(fileUrl, '_blank')
+  }
 }
 
 export default function KnowledgePage() {
@@ -135,15 +166,18 @@ export default function KnowledgePage() {
               const st = (file.display_status || 'queuing') as string
               const info = STATUS_MAP[st] || STATUS_MAP.queuing
               const StatusIcon = info.icon
-              const fileUrl = knowledgeApi.getFileUrl(file.id, 'inline')
               const dlUrl   = knowledgeApi.getFileUrl(file.id, 'attachment')
               return (
                 <div key={file.id}
                      className="grid grid-cols-12 gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors items-center">
                   {/* 文件名 */}
                   <div className="col-span-4 flex items-center gap-3 min-w-0">
-                    <FileText className="w-5 h-5 text-primary-600 shrink-0" />
-                    <span className="text-sm text-gray-900 truncate" title={file.name}>
+                    {(() => { const Icon = getFileIcon(file.name); return <Icon className="w-5 h-5 text-primary-600 shrink-0" /> })()}
+                    <span
+                      className="text-sm text-gray-900 truncate cursor-pointer hover:text-primary-600 hover:underline"
+                      title={file.name}
+                      onClick={() => openFilePreview(file)}
+                    >
                       {file.name}
                     </span>
                   </div>
@@ -169,11 +203,13 @@ export default function KnowledgePage() {
                   {/* 操作 */}
                   <div className="col-span-2 flex justify-end gap-1">
                     {/* 查看/预览 */}
-                    <a href={fileUrl} target="_blank" rel="noreferrer"
-                       className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-white rounded transition-colors"
-                       title="查看">
+                    <button
+                      onClick={() => openFilePreview(file)}
+                      className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-white rounded transition-colors"
+                      title={isOnlyOfficeFile(file.name) ? '在线预览' : '查看'}
+                    >
                       <Eye className="w-4 h-4" />
-                    </a>
+                    </button>
                     {/* 下载 */}
                     <a href={dlUrl} download={file.name}
                        className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-white rounded transition-colors"

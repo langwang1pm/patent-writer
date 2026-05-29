@@ -17,10 +17,15 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-body {
+html, body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  height: 100%;
+}
+
+#root {
+  height: 100%;
 }
 
 * {

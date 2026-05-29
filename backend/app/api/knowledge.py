@@ -61,6 +61,7 @@ async def create_knowledge_config(
         top_k=data.top_k,
         score_threshold=data.score_threshold,
         rerank_enabled=data.rerank_enabled,
+        indexing_technique=data.indexing_technique,
         is_default=data.is_default,
     )
     db.add(config)

@@ -13,6 +13,7 @@ class KnowledgeConfigBase(BaseModel):
     top_k: int = Field(5, ge=1, le=20, description="检索返回片段数")
     score_threshold: float = Field(0.7, ge=0.0, le=1.0, description="相似度阈值")
     rerank_enabled: bool = Field(True, description="是否启用重排序")
+    indexing_technique: str = Field("economy", pattern="^(economy|high_quality)$", description="索引模式: economy(关键词匹配,无需Embedding) | high_quality(向量检索,需Embedding模型)")
 
 
 class KnowledgeConfigCreate(KnowledgeConfigBase):
@@ -29,6 +30,7 @@ class KnowledgeConfigUpdate(BaseModel):
     top_k: int | None = Field(None, ge=1, le=20)
     score_threshold: float | None = Field(None, ge=0.0, le=1.0)
     rerank_enabled: bool | None = None
+    indexing_technique: str | None = Field(None, pattern="^(economy|high_quality)$")
     is_default: bool | None = None
     status: str | None = Field(None, pattern="^(active|inactive)$")
 
