@@ -19,6 +19,8 @@ export interface Message {
   document_id: string | null
   created_at: string
   document?: ChatDocument | null
+  /** 流式结束后导出的 docx 下载地址（相对路径） */
+  docx_url?: string | null
 }
 
 export interface ChatDocument {

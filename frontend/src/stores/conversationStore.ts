@@ -211,12 +211,20 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           try {
             const data = JSON.parse(event.data)
             const aiMessageId = data.ai_message_id
-            console.log('[SSE] done:', data, '| aiMessageId:', aiMessageId)
+            const docxUrl = data.docx_url || null
+            console.log('[SSE] done:', data, '| aiMessageId:', aiMessageId, '| docxUrl:', docxUrl)
 
             if (aiMessageId) {
               set((state) => ({
                 messages: state.messages.map((m) =>
-                  m.id === aiMsgId ? { ...m, id: aiMessageId } : m
+                  m.id === aiMsgId ? { ...m, id: aiMessageId, docx_url: docxUrl } : m
+                ),
+              }))
+            } else if (docxUrl) {
+              // 没有 aiMessageId 时也要把 docx_url 挂到占位消息上
+              set((state) => ({
+                messages: state.messages.map((m) =>
+                  m.id === aiMsgId ? { ...m, docx_url: docxUrl } : m
                 ),
               }))
             }

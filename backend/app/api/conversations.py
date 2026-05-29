@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.models.conversation import Conversation, Message
 from app.models import now_cst
 from app.models.document import Document
+from app.services.markdown_docx_svc import markdown_to_docx_bytes
 from app.schemas.conversation import (
     ConversationCreate,
     ConversationUpdate,
@@ -423,10 +424,13 @@ async def stream_message(
             yield f"event: error\ndata: {{\"message\": {json.dumps(f'流式生成异常: {str(e)}', ensure_ascii=False)}}}\n\n"
             has_error = True
 
-        # 发送 done 事件（包含 message IDs）
+        # 发送 done 事件（包含 message IDs + docx 导出链接）
+        # 使用相对路径，前端直接拼接在后端地址后
+        docx_url = f"/api/v1/conversations/{conversation_id}/messages/{ai_message_id}/export-docx" if ai_message_id else None
         done_data = {
             "user_message_id": str(user_message_id),
             "ai_message_id": str(ai_message_id) if ai_message_id else None,
+            "docx_url": docx_url,
         }
         yield f"event: done\ndata: {json.dumps(done_data, ensure_ascii=False)}\n\n"
 
@@ -437,5 +441,59 @@ async def stream_message(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/conversations/{conversation_id}/messages/{message_id}/export-docx")
+async def export_message_as_docx(
+    conversation_id: uuid.UUID,
+    message_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """将 AI 回复消息导出为 .docx 文件
+
+    从 Message.content（Markdown 格式）生成格式化的 Word 文档。
+    """
+    from fastapi.responses import StreamingResponse
+    import io
+
+    # 查询消息
+    result = await db.execute(
+        select(Message).where(
+            Message.id == message_id,
+            Message.conversation_id == conversation_id,
+        )
+    )
+    message = result.scalar_one_or_none()
+    if not message:
+        raise HTTPException(status_code=404, detail="消息不存在")
+    if message.role != "assistant":
+        raise HTTPException(status_code=400, detail="只能导出 AI 回复消息")
+
+    # 从 Markdown 生成 docx bytes
+    docx_bytes = markdown_to_docx_bytes(
+        markdown_text=message.content,
+        title=message.conversation.title if hasattr(message, 'conversation') else "AI 回复",
+    )
+
+    # 生成文件名（取对话标题前 30 字符）
+    result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+    conv = result.scalar_one_or_none()
+    filename = (conv.title[:30] if conv else "document").replace("/", "-").replace("\\", "-") + ".docx"
+
+    logger.info(
+        "message_exported_as_docx",
+        conversation_id=str(conversation_id),
+        message_id=str(message_id),
+        filename=filename,
+    )
+
+    return StreamingResponse(
+        io.BytesIO(docx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
         },
     )
