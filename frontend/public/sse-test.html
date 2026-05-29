@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE 调试工具</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        input, button {
+            padding: 10px;
+            margin: 5px;
+            background: #2a2a2a;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            border-radius: 4px;
+        }
+        button {
+            cursor: pointer;
+            background: #0d7377;
+        }
+        button:hover {
+            background: #14a19a;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #1b4332;
+            color: #95d5b2;
+        }
+        .status.disconnected {
+            background: #640d14;
+            color: #ff9fa8;
+        }
+        .log {
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            height: 500px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 5px;
+            border-left: 3px solid #444;
+        }
+        .log-entry.event {
+            border-left-color: #0d7377;
+        }
+        .log-entry.data {
+            border-left-color: #7209b7;
+            color: #c8b6ff;
+        }
+        .log-entry.error {
+            border-left-color: #e63946;
+            color: #ff9fa8;
+        }
+        .log-entry.info {
+            border-left-color: #f4a261;
+            color: #ffd7ba;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 SSE 流式响应调试工具</h1>
+        
+        <div class="controls">
+            <input type="text" id="conversationId" placeholder="对话 ID (UUID)" style="width: 300px;">
+            <input type="text" id="messageContent" placeholder="消息内容" style="width: 400px;" value="你好，请帮我写一份技术交底书">
+            <button onclick="startSSE()">开始 SSE 连接</button>
+            <button onclick="stopSSE()">停止</button>
+            <button onclick="clearLog()">清空日志</button>
+        </div>
+
+        <div id="status" class="status disconnected">❌ 未连接</div>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        let eventSource = null;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function setStatus(connected) {
+            const statusDiv = document.getElementById('status');
+            if (connected) {
+                statusDiv.className = 'status connected';
+                statusDiv.textContent = '✅ 已连接';
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.textContent = '❌ 未连接';
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function stopSSE() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                setStatus(false);
+                log('SSE 连接已关闭', 'info');
+            }
+        }
+
+        function startSSE() {
+            const conversationId = document.getElementById('conversationId').value.trim();
+            const content = document.getElementById('messageContent').value.trim();
+
+            if (!conversationId || !content) {
+                alert('请填写对话 ID 和消息内容');
+                return;
+            }
+
+            // 停止现有连接
+            stopSSE();
+
+            // 构建 SSE URL
+            const baseUrl = window.location.origin.replace(':3000', ':8000');
+            const url = `${baseUrl}/api/v1/conversations/${conversationId}/stream?content=${encodeURIComponent(content)}`;
+            
+            log(`正在连接: ${url}`, 'info');
+
+            // 创建 EventSource
+            eventSource = new EventSource(url);
+            setStatus(true);
+
+            // 监听所有事件
+            eventSource.addEventListener('message_start', (event) => {
+                log(`📥 收到 message_start 事件: ${event.data}`, 'event');
+            });
+
+            eventSource.addEventListener('content_delta', (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`📥 收到 content_delta: "${data.delta?.substring(0, 50)}..."`, 'data');
+                } catch (e) {
+                    log(`📥 收到 content_delta (解析失败): ${event.data}`, 'data');
+                }
+            });
+
+            eventSource.addEventListener('message_end', (event) => {
+                log(`📥 收到 message_end 事件: ${event.data}`, 'event');
+            });
+
+            eventSource.addEventListener('done', (event) => {
+                log(`📥 收到 done 事件: ${event.data}`, 'event');
+            });
+
+            eventSource.addEventListener('error', (event) => {
+                log(`❌ 收到 error 事件: ${event.data}`, 'error');
+            });
+
+            // 通用消息处理
+            eventSource.onmessage = (event) => {
+                log(`📥 收到通用消息: ${event.data}`, 'data');
+            };
+
+            // 错误处理
+            eventSource.onerror = (error) => {
+                log(`❌ SSE 连接错误: ${error}`, 'error');
+                log(`   readyState: ${eventSource.readyState}`, 'error');
+                
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    setStatus(false);
+                    log('SSE 连接已关闭', 'info');
+                } else if (eventSource.readyState === EventSource.CONNECTING) {
+                    log('SSE 正在重连...', 'info');
+                }
+            };
+        }
+
+        // 页面加载时自动填充测试数据
+        window.onload = () => {
+            log('SSE 调试工具已就绪', 'info');
+            log('请填写对话 ID 和消息内容，然后点击"开始 SSE 连接"', 'info');
+        };
+    </script>
+</body>
+</html>

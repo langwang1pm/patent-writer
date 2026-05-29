@@ -1,7 +1,8 @@
 """Dify 知识库客户端"""
+import json
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, AsyncGenerator
 
 import httpx
 
@@ -28,6 +29,16 @@ class RetrieveResult:
     source: str = "dify"  # dify | local_fallback | none
     latency_ms: int = 0
     cached: bool = False
+
+
+@dataclass
+class DifyMessage:
+    """Dify 聊天消息"""
+    message_id: str = ""
+    conversation_id: str = ""
+    answer: str = ""
+    citations: list[dict] = field(default_factory=list)  # Dify 返回的引用列表
+    metadata: dict = field(default_factory=dict)
 
 
 class DifyClient:
@@ -139,6 +150,191 @@ class DifyClient:
         except Exception as e:
             logger.error("dify_retrieve_error", error=str(e))
             raise
+
+    async def chat_messages(
+        self,
+        query: str,
+        user_id: str = "patent-writer",
+        conversation_id: str | None = None,
+        response_mode: str = "streaming",
+        timeout: int = 120,
+    ) -> DifyMessage:
+        """
+        调用 Dify 对话型应用（Agent）API
+
+        Args:
+            query: 用户消息
+            user_id: 用户标识
+            conversation_id: 对话 ID（续接会话）
+            response_mode: blocking | streaming
+            timeout: 超时秒数
+
+        Returns:
+            DifyMessage: 包含回答和引用的消息对象
+        """
+        url = f"{self.base_url}/v1/chat-messages"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload: dict[str, Any] = {
+            "query": query,
+            "inputs": {},  # Dify 要求：即使无输入变量也必须传空对象
+            "response_mode": response_mode,
+            "user": user_id,
+        }
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+
+        logger.info("dify_chat_start", query=query[:50], response_mode=response_mode)
+
+        try:
+            if response_mode == "blocking":
+                # 非流式：等待完整响应（读取超时放宽）
+                httpx_timeout = httpx.Timeout(connect=10.0, read=timeout * 10, write=30.0, pool=5.0)
+                async with httpx.AsyncClient(timeout=httpx_timeout) as client:
+                    response = await client.post(url, json=payload, headers=headers)
+                    response.raise_for_status()
+                    data = response.json()
+
+                return DifyMessage(
+                    message_id=data.get("message_id", ""),
+                    conversation_id=data.get("conversation_id", ""),
+                    answer=data.get("answer", ""),
+                    citations=data.get("citations", []),
+                    metadata=data,
+                )
+
+            else:
+                # 流式：SSE，收集所有 answer 片段后合并返回
+                full_answer = []
+                msg_id = ""
+                conv_id = ""
+                citations = []
+
+                httpx_timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=5.0)
+                async with httpx.AsyncClient(timeout=httpx_timeout) as client:
+                    async with client.stream("POST", url, json=payload, headers=headers) as resp:
+                        resp.raise_for_status()
+                        async for line in resp.aiter_lines():
+                            if not line.startswith("data: "):
+                                continue
+                            raw = line[6:].strip()
+                            if not raw or raw == "[DONE]":
+                                continue
+                            try:
+                                event = json.loads(raw)
+                            except json.JSONDecodeError:
+                                continue
+
+                            etype = event.get("event", "")
+                            # agent_message / message：包含增量文本
+                            if etype in ("agent_message", "message"):
+                                delta = event.get("answer", "")
+                                if delta:
+                                    full_answer.append(delta)
+                                if not msg_id:
+                                    msg_id = event.get("message_id", "")
+                            # message_end：包含引用信息
+                            elif etype == "message_end":
+                                msg_id = event.get("message_id", msg_id)
+                                conv_id = event.get("conversation_id", conv_id)
+                                # Dify 的引用通常在 metadata 或 task 字段
+                                task = event.get("task", {})
+                                metadata = task.get("metadata", {})
+                                citations = metadata.get("citations", [])
+
+                answer = "".join(full_answer)
+                logger.info(
+                    "dify_chat_stream_done",
+                    answer_len=len(answer),
+                    citations_count=len(citations),
+                )
+
+                return DifyMessage(
+                    message_id=msg_id,
+                    conversation_id=conv_id,
+                    answer=answer,
+                    citations=citations,
+                    metadata={"response_mode": "streaming"},
+                )
+
+        except httpx.TimeoutException:
+            logger.error("dify_chat_timeout", timeout=timeout)
+            raise RuntimeError(f"Dify 请求超时（{timeout}s）")
+        except httpx.HTTPStatusError as e:
+            logger.error("dify_chat_http_error", status=e.response.status_code, detail=e.response.text[:200])
+            raise RuntimeError(f"Dify HTTP 错误：{e.response.status_code}")
+        except Exception as e:
+            logger.error("dify_chat_error", error=str(e))
+            raise RuntimeError(f"Dify 调用失败：{e}")
+
+    async def chat_messages_stream(
+        self,
+        query: str,
+        user_id: str = "patent-writer",
+        conversation_id: str | None = None,
+        timeout: int = 120,
+    ) -> AsyncGenerator[tuple[str, str, dict], None]:
+        """
+        流式调用 Dify Agent，SSE 逐事件 yield
+
+        Yields:
+            (event_type, delta/answer, extra_data)
+        """
+        url = f"{self.base_url}/v1/chat-messages"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload: dict[str, Any] = {
+            "query": query,
+            "inputs": {},  # Dify 要求：即使无输入变量也必须传空对象
+            "response_mode": "streaming",
+            "user": user_id,
+        }
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+
+        try:
+            # 细粒度超时：连接10s，读取不限（流式长生成需要）
+            httpx_timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=5.0)
+            async with httpx.AsyncClient(timeout=httpx_timeout) as client:
+                async with client.stream("POST", url, json=payload, headers=headers) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        raw = line[6:].strip()
+                        if not raw or raw == "[DONE]":
+                            continue
+                        try:
+                            event = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+
+                        etype = event.get("event", "")
+                        if etype in ("agent_message", "message"):
+                            yield (etype, event.get("answer", ""), event)
+                        elif etype == "message_end":
+                            yield ("message_end", "", event)
+                        elif etype == "error":
+                            yield ("error", event.get("message", ""), {})
+        except Exception as e:
+            # 检查是否是正常的连接关闭（不是真正的错误）
+            error_str = str(e)
+            error_type = type(e).__name__
+            logger.info("dify_stream_exception", error_type=error_type, error_message=error_str)
+            
+            if any(keyword in error_str.lower() for keyword in [
+                'connection closed', 'stream ended', 'closed',
+                'connectionreseterror', 'broken pipe'
+            ]):
+                logger.info("dify_stream_normal_close", message="SSE 连接正常关闭")
+                return  # 正常结束，不 yield error
+            
+            logger.error("dify_chat_stream_error", error=error_str, error_type=error_type)
+            yield ("error", error_str, {})
 
     async def check_health(self) -> bool:
         """健康检查：验证 Dify 服务连通性"""

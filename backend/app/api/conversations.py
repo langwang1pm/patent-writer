@@ -1,5 +1,6 @@
 """对话管理 API"""
 import uuid
+import json
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +8,7 @@ from sqlalchemy import select, func, desc
 from sqlalchemy.orm import selectinload
 
 from app.dependencies import get_db
+from app.config import get_settings
 from app.models.conversation import Conversation, Message
 from app.models import now_cst
 from app.models.document import Document
@@ -20,8 +22,39 @@ from app.schemas.conversation import (
     SendMessageRequest,
     SendMessageResponse,
 )
+from app.schemas.document import DocumentResponse
+from app.schemas.citation import CitationResponse
+from app.clients.dify_client import DifyClient, RetrieveResult
+from app.services.llm_svc import LLMService
+from app.services.document_svc import DocumentService
+from app.services.citation_svc import CitationService
+from app.core.citation_parser import CitationParser
+
+import structlog
+
+logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+def _get_dify_client() -> DifyClient:
+    """创建 Dify 客户端实例"""
+    settings = get_settings()
+    return DifyClient(
+        base_url=settings.dify_base_url,
+        api_key=settings.dify_api_key,
+        knowledge_id=settings.dify_knowledge_id,
+        top_k=settings.retrieval_top_k,
+        score_threshold=settings.score_threshold,
+        rerank=settings.rerank_enabled,
+        timeout=settings.dify_timeout_s,
+        retries=settings.dify_retries,
+    )
+
+
+def _get_llm_service() -> LLMService:
+    """创建 LLM 服务实例"""
+    return LLMService(dify_client=_get_dify_client())
 
 
 @router.post("/conversations", response_model=ConversationResponse, status_code=201)
@@ -48,21 +81,18 @@ async def list_conversations(
     search: str | None = Query(None, description="搜索标题"),
 ):
     """获取对话列表（无 N+1）"""
-    # 子查询：统计每个 conversation 的消息数
     msg_count_sub = (
         select(Message.conversation_id, func.count(Message.id).label("msg_count"))
         .group_by(Message.conversation_id)
         .subquery()
     )
 
-    # 子查询：统计每个 conversation 的文档数
     doc_count_sub = (
         select(Document.conversation_id, func.count(Document.id).label("doc_count"))
         .group_by(Document.conversation_id)
         .subquery()
     )
 
-    # 主查询：conversation + 左连接统计数（3 表 join → 固定 3 次查询）
     query = (
         select(
             Conversation,
@@ -79,11 +109,9 @@ async def list_conversations(
         query = query.where(Conversation.title.ilike(f"%{search}%"))
         count_query = count_query.where(Conversation.title.ilike(f"%{search}%"))
 
-    # 总数（1 次查询）
     count_result = await db.execute(count_query)
     total = count_result.scalar() or 0
 
-    # 分页
     query = query.order_by(desc(Conversation.updated_at))
     query = query.offset((page - 1) * page_size).limit(page_size)
 
@@ -178,14 +206,12 @@ async def list_messages(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """获取对话消息列表"""
-    # 验证对话存在
     result = await db.execute(
         select(Conversation).where(Conversation.id == conversation_id)
     )
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="对话不存在")
 
-    # 获取消息
     result = await db.execute(
         select(Message)
         .where(Message.conversation_id == conversation_id)
@@ -202,13 +228,13 @@ async def send_message(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
-    发送消息并生成回复（MVP 简化版，非流式）
-    
+    发送消息并调用 Dify Agent 生成回复（非流式）
+
     完整流程：
-    1. 调用 Dify 知识库检索
-    2. 调用 LLM 生成内容
-    3. 解析引用标注
-    4. 持久化文档和引用
+    1. 保存用户消息
+    2. 调用 Dify Agent（内部已集成知识库检索 RAG）
+    3. 保存 AI 回复
+    4. 返回结果
     """
     # 验证对话存在
     result = await db.execute(
@@ -217,9 +243,6 @@ async def send_message(
     conversation = result.scalar_one_or_none()
     if not conversation:
         raise HTTPException(status_code=404, detail="对话不存在")
-
-    # TODO: 实现完整的 RAG + LLM 生成流程
-    # 当前返回模拟数据
 
     # 创建用户消息
     user_message = Message(
@@ -245,18 +268,31 @@ async def send_message(
 
     conversation.updated_at = now_cst()
 
-    # TODO: 调用 Dify 检索 + LLM 生成
-    # 模拟 AI 回复
-    mock_content = f"已收到您的需求：{data.content}\n\n正在调用知识库检索...\n\n[MVP 阶段请实现完整的 RAG 流程]"
+    # ── 调用 Dify Agent 生成回复 ──
+    try:
+        llm = _get_llm_service()
+
+        # 检查是否有已存的 Dify conversation_id（存在 message metadata 中）
+        # 简化实现：每次都作为新对话，后续可扩展为多轮
+        answer, dify_conv_id, citations_chunks = await llm.generate_sync(
+            user_message=data.content,
+            task_type="技术交底书",
+            conversation_id=None,
+        )
+
+        ai_content = answer or "（AI 未返回内容，请检查 Dify 服务配置）"
+
+    except Exception as e:
+        logger.error("dify_call_failed", error=str(e), conversation_id=str(conversation_id))
+        ai_content = f"⚠️ 调用 AI 服务失败：{str(e)}\n\n请检查 Dify 服务是否正常运行，或稍后重试。"
 
     # 创建 AI 回复
     ai_message = Message(
         conversation_id=conversation_id,
         role="assistant",
-        content=mock_content,
+        content=ai_content,
     )
     db.add(ai_message)
-
     await db.flush()
     await db.refresh(ai_message)
 
@@ -274,27 +310,125 @@ async def stream_message(
     conversation_id: uuid.UUID,
     content: str = Query(..., description="消息内容"),
     knowledge_config_id: uuid.UUID | None = Query(None, description="知识库配置 ID"),
+    db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
     """
-    SSE 流式生成回复
+    SSE 流式生成回复 — 调用 Dify Agent 流式 API，并持久化消息到数据库
     
-    TODO: 实现完整的流式生成流程
+    完整流程：
+    1. 验证对话存在
+    2. 保存用户消息到数据库
+    3. 流式调用 Dify，实时返回内容片段
+    4. 流式结束后，保存 AI 回复到数据库
+    5. 返回 done 事件，包含消息 ID
     """
-    import asyncio
     from fastapi.responses import StreamingResponse
 
+    settings = get_settings()
+    dify = _get_dify_client()
+
+    # 验证对话存在
+    result = await db.execute(
+        select(Conversation).where(Conversation.id == conversation_id)
+    )
+    conversation = result.scalar_one_or_none()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="对话不存在")
+
+    # ── 1. 保存用户消息 ──
+    user_message = Message(
+        conversation_id=conversation_id,
+        role="user",
+        content=content,
+    )
+    db.add(user_message)
+    await db.flush()
+    await db.refresh(user_message)
+    user_message_id = user_message.id
+
+    # 更新对话标题（首条用户消息时）
+    if conversation.title == '新对话':
+        count_result = await db.execute(
+            select(func.count(Message.id)).where(
+                Message.conversation_id == conversation_id,
+                Message.role == 'user',
+            )
+        )
+        user_msg_count = count_result.scalar()
+        if user_msg_count == 1:
+            auto_title = content[:30].replace(chr(10), ' ').strip()
+            if auto_title:
+                conversation.title = auto_title
+                logger.info(
+                    'conversation_title_auto_generated',
+                    conversation_id=str(conversation_id),
+                    title=auto_title,
+                )
+
+    conversation.updated_at = now_cst()
+    await db.flush()
+
     async def event_generator():
-        # 发送开始事件
-        yield "event: message_start\ndata: {}\n\n"
+        # 发送开始事件（包含 user_message_id）
+        yield f"event: message_start\ndata: {{\"conversation_id\": \"{conversation_id}\", \"user_message_id\": \"{user_message_id}\"}}\n\n"
 
-        # TODO: 实现 Dify 检索 + LLM 流式生成
-        # 模拟流式输出
-        words = ["正在", "分析", "需求", "...", "\n\n", "[MVP", "阶段", "请", "实现]"]
-        for word in words:
-            yield f"event: content_delta\ndata: {{\"delta\": \"{word}\"}}\n\n"
-            await asyncio.sleep(0.1)
+        full_answer = []
+        has_error = False
+        ai_message_id = None
 
-        yield "event: done\ndata: {}\n\n"
+        try:
+            async for event_type, delta, extra_data in dify.chat_messages_stream(
+                query=content,
+                user_id=f"patent-writer-{conversation_id}",
+                conversation_id=None,
+                timeout=settings.dify_timeout_s * 40,
+            ):
+                if event_type == "error":
+                    error_msg = delta or "Dify 流式调用出错"
+                    yield f"event: error\ndata: {{\"message\": {json.dumps(error_msg, ensure_ascii=False)}}}\n\n"
+                    has_error = True
+                    break
+
+                if event_type in ("agent_message", "message") and delta:
+                    full_answer.append(delta)
+                    yield f"event: content_delta\ndata: {{\"delta\": {json.dumps(delta, ensure_ascii=False)}}}\n\n"
+
+                elif event_type == "message_end":
+                    conv_id = extra_data.get("conversation_id", "")
+                    yield f"event: message_end\ndata: {{\"conversation_id\": \"{conv_id}\"}}\n\n"
+
+            if not has_error:
+                # ── 2. 保存 AI 回复 ──
+                ai_content = "".join(full_answer) or "（AI 未返回内容，请检查 Dify 服务配置）"
+                ai_message = Message(
+                    conversation_id=conversation_id,
+                    role="assistant",
+                    content=ai_content,
+                )
+                db.add(ai_message)
+                await db.flush()
+                await db.refresh(ai_message)
+                ai_message_id = ai_message.id
+
+                logger.info(
+                    "stream_message_saved",
+                    conversation_id=str(conversation_id),
+                    user_msg_id=str(user_message_id),
+                    ai_msg_id=str(ai_message_id),
+                    answer_len=len(ai_content),
+                )
+
+        except Exception as e:
+            logger.error("stream_error", error=str(e), conversation_id=str(conversation_id))
+            yield f"event: error\ndata: {{\"message\": {json.dumps(f'流式生成异常: {str(e)}', ensure_ascii=False)}}}\n\n"
+            has_error = True
+
+        # 发送 done 事件（包含 message IDs）
+        done_data = {
+            "user_message_id": str(user_message_id),
+            "ai_message_id": str(ai_message_id) if ai_message_id else None,
+        }
+        yield f"event: done\ndata: {json.dumps(done_data, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_generator(),

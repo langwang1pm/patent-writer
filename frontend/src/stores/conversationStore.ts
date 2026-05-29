@@ -2,12 +2,16 @@ import { create } from 'zustand'
 import type { Conversation, Message } from '@/types/conversation'
 import { conversationApi } from '@/services/conversationApi'
 
+/** 流式输出的阶段 */
+export type StreamPhase = 'idle' | 'connecting' | 'thinking' | 'generating' | 'done'
+
 interface ConversationState {
   conversations: Conversation[]
   currentConversationId: string | null
   messages: Message[]
   isLoading: boolean
   isStreaming: boolean
+  streamPhase: StreamPhase  // 新增：流式阶段
   error: string | null
 
   // Actions
@@ -27,6 +31,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   messages: [],
   isLoading: false,
   isStreaming: false,
+  streamPhase: 'idle',
   error: null,
 
   fetchConversations: async () => {
@@ -57,7 +62,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   setCurrentConversation: (id: string | null) => {
-    set({ currentConversationId: id, messages: [] })
+    set({ currentConversationId: id, messages: [], streamPhase: 'idle' })
     if (id) {
       get().fetchMessages(id)
     }
@@ -77,43 +82,188 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const { currentConversationId } = get()
     if (!currentConversationId) return
 
-    set({ isStreaming: true, error: null })
+    set({ isStreaming: true, streamPhase: 'connecting', error: null })
+
+    // 先添加用户消息到 UI
+    const userMsg: Message = {
+      id: `temp-user-${Date.now()}`,
+      conversation_id: currentConversationId,
+      role: 'user' as const,
+      content,
+      document_id: null,
+      created_at: new Date().toISOString(),
+    }
+
+    // 创建占位 AI 消息（流式填充内容）
+    const aiMsgId = `temp-ai-${Date.now()}`
+    const placeholderAiMsg: Message = {
+      id: aiMsgId,
+      conversation_id: currentConversationId,
+      role: 'assistant' as const,
+      content: '',
+      document_id: null,
+      created_at: new Date().toISOString(),
+    }
+
+    set((state) => ({
+      messages: [...state.messages, userMsg, placeholderAiMsg],
+    }))
 
     try {
-      const response = await conversationApi.sendMessage(currentConversationId, {
+      // ── 通过 SSE 流式调用 Dify Agent ──
+      const streamUrl = conversationApi.getStreamUrl(
+        currentConversationId,
         content,
-        knowledge_config_id: knowledgeConfigId,
+        knowledgeConfigId,
+      )
+
+      // 连接建立后切换到 thinking 阶段
+      set({ streamPhase: 'thinking' })
+
+      await new Promise<void>((resolve, reject) => {
+        const eventSource = new EventSource(streamUrl)
+
+        let fullContent = ''
+        let isDone = false  // 标记是否已收到 done 事件
+
+        // ── message_start：连接确认 ──
+        eventSource.addEventListener('message_start', (event: any) => {
+          if (isDone) return
+          try {
+            const data = JSON.parse(event.data)
+            const userMessageId = data.user_message_id
+            if (userMessageId) {
+              set((state) => ({
+                messages: state.messages.map((m) =>
+                  m.id === userMsg.id ? { ...m, id: userMessageId } : m
+                ),
+              }))
+            }
+          } catch (e) {
+            console.error('解析 message_start 失败:', e)
+          }
+        })
+
+        // ── content_delta：收到第一个 token 后切换到 generating 阶段 ──
+        eventSource.addEventListener('content_delta', (event: any) => {
+          if (isDone) return
+          try {
+            const data = JSON.parse(event.data)
+            const delta = data.delta || ''
+            fullContent += delta
+
+            // 首次收到内容 → 切换到 generating 阶段
+            set((state) => {
+              const newPhase = state.streamPhase === 'thinking' ? 'generating' : state.streamPhase
+              return {
+                streamPhase: newPhase,
+                messages: state.messages.map((m) =>
+                  m.id === aiMsgId ? { ...m, content: fullContent } : m
+                ),
+              }
+            })
+          } catch (e) {
+            console.error('解析 content_delta 失败:', e)
+          }
+        })
+
+        eventSource.addEventListener('error', (event: any) => {
+          if (isDone) {
+            console.log('[SSE] error 事件在 done 之后，忽略')
+            return
+          }
+          try {
+            const data = JSON.parse(event.data)
+            const errorMsg = data.message || '流式生成出错'
+            console.log('[SSE] error event:', errorMsg)
+
+            if (fullContent.length > 0) {
+              console.log('[SSE] 已有内容，忽略 error 事件')
+              return
+            }
+
+            set((state) => ({
+              messages: state.messages.map((m) =>
+                m.id === aiMsgId
+                  ? { ...m, content: `⚠️ ${errorMsg}` }
+                  : m
+              ),
+              isStreaming: false,
+              streamPhase: 'done',
+              error: errorMsg,
+            }))
+          } catch {
+            if (fullContent.length > 0) {
+              console.log('[SSE] error 事件解析失败，但已有内容，忽略')
+              return
+            }
+            set({ isStreaming: false, streamPhase: 'done', error: '网络错误或服务不可用' })
+          }
+          eventSource.close()
+          reject(new Error('Stream error'))
+        })
+
+        // ── done：完成 ──
+        eventSource.addEventListener('done', (event: any) => {
+          if (isDone) return
+          isDone = true
+
+          try {
+            const data = JSON.parse(event.data)
+            const aiMessageId = data.ai_message_id
+            console.log('[SSE] done:', data, '| aiMessageId:', aiMessageId)
+
+            if (aiMessageId) {
+              set((state) => ({
+                messages: state.messages.map((m) =>
+                  m.id === aiMsgId ? { ...m, id: aiMessageId } : m
+                ),
+              }))
+            }
+          } catch (e) {
+            console.error('解析 done 失败:', e)
+          }
+
+          eventSource.close()
+          set({ isStreaming: false, streamPhase: 'done' })
+          get().fetchConversations()
+          resolve()
+        })
+
+        // 超时处理（300秒）
+        setTimeout(() => {
+          if (get().isStreaming) {
+            console.warn('SSE 超时（300秒）')
+            eventSource.close()
+            set({ isStreaming: false, streamPhase: 'done' })
+            resolve()
+          }
+        }, 300000)
+
+        // 连接错误处理
+        eventSource.onerror = () => {
+          if (isDone) {
+            console.log('[SSE] onerror 在 done 之后，忽略')
+            return
+          }
+          if (get().isStreaming) {
+            set((state) => ({
+              messages: state.messages.map((m) =>
+                m.id === aiMsgId
+                  ? { ...m, content: fullContent || '⚠️ 连接中断，请重试' }
+                  : m
+              ),
+              isStreaming: false,
+              streamPhase: 'done',
+              error: '连接中断，请检查网络或 Dify 服务状态',
+            }))
+            eventSource.close()
+            reject(new Error('EventSource connection failed'))
+          }
+        }
       })
-
-      // 添加用户消息和 AI 回复
-      set((state) => ({
-        messages: [
-          ...state.messages,
-          {
-            id: `temp-${Date.now()}`,
-            conversation_id: currentConversationId,
-            role: 'user' as const,
-            content,
-            document_id: null,
-            created_at: new Date().toISOString(),
-          },
-          {
-            id: response.message_id,
-            conversation_id: currentConversationId,
-            role: 'assistant' as const,
-            content: response.content,
-            document_id: response.document?.id || null,
-            created_at: new Date().toISOString(),
-            document: response.document,
-          },
-        ],
-        isStreaming: false,
-      }))
-
-      // 刷新对话列表，获取后端可能自动生成的标题
-      await get().fetchConversations()
     } catch (error) {
-      set({ error: (error as Error).message, isStreaming: false })
+      set({ error: (error as Error).message, isStreaming: false, streamPhase: 'done' })
     }
   },
 

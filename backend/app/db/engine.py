@@ -7,9 +7,16 @@ from app.config import get_settings
 
 settings = get_settings()
 
-# 同步引擎（用于 Alembic 迁移，使用解码后的 URL）
+# 调试：打印数据库 URL
+print("=" * 80)
+print("DATABASE_URL from .env:", settings.database_url)
+print("decoded_database_url:", settings.decoded_database_url)
+print("async_database_url:", settings.async_database_url)
+print("=" * 80)
+
+# 同步引擎（用于 Alembic 迁移，直接使用 database_url）
 sync_engine = create_engine(
-    settings.decoded_database_url,
+    settings.database_url,  # 直接使用，不解码
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,
@@ -26,7 +33,7 @@ def set_search_path(dbapi_connection, connection_record):
 
 # 异步引擎（用于应用）
 engine = create_async_engine(
-    settings.async_database_url,
+    settings.database_url.replace("postgresql://", "postgresql+asyncpg://"),  # 直接替换协议
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,

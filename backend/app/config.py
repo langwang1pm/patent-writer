@@ -50,28 +50,52 @@ class Settings(BaseSettings):
 
     @property
     def decoded_database_url(self) -> str:
-        """解码 DATABASE_URL 中的密码部分（URL 编码 → 原始字符）"""
-        if not self.database_url:
-            return ""
-        # 处理 URL 编码的密码：postgres://user:pass@host/db
-        # 密码中的 %XX 需要还原为原始字符才能用于 asyncpg
-        if "://" in self.database_url:
-            prefix, rest = self.database_url.split("://", 1)
-            if "@" in rest:
-                creds, host_part = rest.split("@", 1)
-                if ":" in creds:
-                    user, encoded_pass = creds.split(":", 1)
-                    # 解码密码中的 %XX
-                    decoded_pass = unquote_plus(encoded_pass)
-                    return f"{prefix}://{user}:{decoded_pass}@{host_part}"
-        return self.database_url
+        """返回 DATABASE_URL（确保密码部分已正确 URL 编码）"""
+        # pydantic-settings 读取 .env 时可能已对值做 URL 解码，
+        # 导致密码中的特殊字符（@ : / [ ] ( ) = 等）暴露，SQLAlchemy 解析失败。
+        # 此处重新编码，确保传给 SQLAlchemy 的 URL 是合法的。
+        return _ensure_encoded_url(self.database_url)
 
     @property
     def async_database_url(self) -> str:
-        """SQLAlchemy asyncpg 连接串（使用解码后的 URL）"""
-        return self.decoded_database_url.replace(
+        """SQLAlchemy asyncpg 连接串（密码保持 URL 编码）"""
+        return _ensure_encoded_url(self.database_url).replace(
             "postgresql://", "postgresql+asyncpg://"
         )
+
+
+def _ensure_encoded_url(url: str) -> str:
+    """确保 PostgreSQL URL 中密码部分已正确 URL 编码。
+    
+    如果 pydantic-settings 已对 .env 值做 URL 解码，
+    则解析各组件后重新拼装并返回编码后的 URL。
+    """
+    from urllib.parse import quote_plus, urlparse, urlunparse
+
+    parsed = urlparse(url)
+    if not parsed.password:
+        return url  # 无密码或已无法解析，原样返回
+    # 如果密码中包含特殊字符（@ : / [ ] ( ) 等），说明未编码，需要重新编码
+    # 判断依据：密码解码后仍等于自身（即不含 %XX），但包含特殊字符
+    decoded_pw = unquote_plus(parsed.password)
+    if decoded_pw == parsed.password:
+        # 密码未编码（是明文），需要编码
+        encoded_pw = quote_plus(parsed.password)
+        # 重新拼装 URL（用户名密码部分）
+        from urllib.parse import urlunparse
+        # 用 netloc 重建：userinfo@host:port
+        userinfo = parsed.username or ""
+        if encoded_pw:
+            userinfo = f"{userinfo}:{encoded_pw}" if userinfo else encoded_pw
+        # 更简单的做法：直接替换 password 部分
+        # 用 urllib.parse 的 _replace 不行，手动拼
+        new_netloc = f"{parsed.username}:{quote_plus(parsed.password)}@{parsed.hostname}"
+        if parsed.port:
+            new_netloc += f":{parsed.port}"
+        new_parsed = parsed._replace(netloc=new_netloc)
+        return urlunparse(new_parsed)
+    # 密码已编码，原样返回
+    return url
 
 
 @lru_cache
