@@ -104,14 +104,16 @@ async def delete_document(
 
 
 @router.post("/documents/{document_id}/export")
+@router.get("/documents/{document_id}/export-docx")
 async def export_document(
     document_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """导出文档为 Word 格式
-    
-    TODO: 实现完整的 Word 导出逻辑
-    """
+    """导出文档为 Word 格式（.docx）"""
+    import urllib.parse
+    from app.models.conversation import Conversation
+    from app.services.markdown_docx_svc import markdown_to_docx_bytes
+
     result = await db.execute(
         select(Document)
         .options(selectinload(Document.citations))
@@ -122,28 +124,27 @@ async def export_document(
     if not document:
         raise HTTPException(status_code=404, detail="文档不存在")
 
-    # TODO: 使用 python-docx 实现真正的导出
-    # 当前返回模拟文件
-    content = f"""
-    {document.title}
-    {'=' * len(document.title)}
-    
-    {document.content_html}
-    
-    ---
-    引用来源
-    ---
-    """
-    for i, citation in enumerate(document.citations, 1):
-        content += f"\n[{i}] {citation.source_name}\n{citation.chunk_content}\n"
+    # 优先使用 content_markdown，否则回退到 content_html
+    md_text = document.content_markdown or document.content_html
+    docx_bytes = markdown_to_docx_bytes(
+        markdown_text=md_text,
+        title=document.title,
+    )
 
-    # 生成简单的文本文件作为演示
-    file_content = content.encode("utf-8")
-    
+    # 取对话标题作为文件名
+    conv_result = await db.execute(
+        select(Conversation).where(Conversation.id == document.conversation_id)
+    )
+    conv = conv_result.scalar_one_or_none()
+    safe_title = (conv.title[:30] if conv else document.title[:30]).replace("/", "-").replace("\\", "-")
+    filename = safe_title + ".docx"
+    encoded_filename = urllib.parse.quote(filename)
+
     return StreamingResponse(
-        io.BytesIO(file_content),
+        io.BytesIO(docx_bytes),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={
-            "Content-Disposition": f'attachment; filename="{document.title}.docx"'
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition",
         },
     )

@@ -145,23 +145,40 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         })
 
         // ── content_delta：收到第一个 token 后切换到 generating 阶段 ──
+        // 节流：避免每个 delta 都触发 React 重渲染导致 Markdown 叠加/蒙层
+        let lastRenderTime = 0
+        let pendingRenderTimer: ReturnType<typeof setTimeout> | null = null
+        const RENDER_INTERVAL_MS = 50  // 每 50ms 最多渲染一次（~20fps）
+
+        const scheduleRender = () => {
+          if (pendingRenderTimer) return  // 已有待执行的渲染，跳过
+          const now = Date.now()
+          const elapsed = now - lastRenderTime
+          const delay = Math.max(0, RENDER_INTERVAL_MS - elapsed)
+          pendingRenderTimer = setTimeout(() => {
+            pendingRenderTimer = null
+            lastRenderTime = Date.now()
+            set((state) => ({
+              streamPhase: 'generating',
+              messages: state.messages.map((m) =>
+                m.id === aiMsgId ? { ...m, content: fullContent } : m
+              ),
+            }))
+          }, delay)
+        }
+
         eventSource.addEventListener('content_delta', (event: any) => {
           if (isDone) return
           try {
             const data = JSON.parse(event.data)
             const delta = data.delta || ''
             fullContent += delta
-
-            // 首次收到内容 → 切换到 generating 阶段
-            set((state) => {
-              const newPhase = state.streamPhase === 'thinking' ? 'generating' : state.streamPhase
-              return {
-                streamPhase: newPhase,
-                messages: state.messages.map((m) =>
-                  m.id === aiMsgId ? { ...m, content: fullContent } : m
-                ),
-              }
-            })
+            // [DEBUG] 记录 delta 长度，发布后可删除
+            if (delta.length > 0) {
+              console.log(`[SSE] content_delta received, delta_len=${delta.length}, total_len=${fullContent.length}, first_10=${delta.slice(0,10)}`)
+            }
+            // 节流渲染，避免高频更新导致 Markdown 叠加蒙层
+            scheduleRender()
           } catch (e) {
             console.error('解析 content_delta 失败:', e)
           }
@@ -208,23 +225,30 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           if (isDone) return
           isDone = true
 
+          // 清除节流定时器，确保最终内容完整渲染
+          if (pendingRenderTimer) {
+            clearTimeout(pendingRenderTimer)
+            pendingRenderTimer = null
+          }
+
           try {
             const data = JSON.parse(event.data)
             const aiMessageId = data.ai_message_id
+            const documentId = data.document_id || null
             const docxUrl = data.docx_url || null
-            console.log('[SSE] done:', data, '| aiMessageId:', aiMessageId, '| docxUrl:', docxUrl)
+            console.log('[SSE] done:', data, '| aiMessageId:', aiMessageId, '| documentId:', documentId, '| docxUrl:', docxUrl)
 
             if (aiMessageId) {
               set((state) => ({
                 messages: state.messages.map((m) =>
-                  m.id === aiMsgId ? { ...m, id: aiMessageId, docx_url: docxUrl } : m
+                  m.id === aiMsgId ? { ...m, id: aiMessageId, document_id: documentId, docx_url: docxUrl } : m
                 ),
               }))
             } else if (docxUrl) {
-              // 没有 aiMessageId 时也要把 docx_url 挂到占位消息上
+              // 没有 aiMessageId 时也要把 docx_url 和 document_id 挂到占位消息上
               set((state) => ({
                 messages: state.messages.map((m) =>
-                  m.id === aiMsgId ? { ...m, docx_url: docxUrl } : m
+                  m.id === aiMsgId ? { ...m, document_id: documentId, docx_url: docxUrl } : m
                 ),
               }))
             }
@@ -255,6 +279,11 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
             return
           }
           if (get().isStreaming) {
+            // 清除节流定时器
+            if (pendingRenderTimer) {
+              clearTimeout(pendingRenderTimer)
+              pendingRenderTimer = null
+            }
             set((state) => ({
               messages: state.messages.map((m) =>
                 m.id === aiMsgId

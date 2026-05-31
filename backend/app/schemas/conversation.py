@@ -21,14 +21,31 @@ class MessageResponse(MessageBase):
     id: UUID
     conversation_id: UUID
     document_id: UUID | None = None
+    docx_url: str | None = None
     created_at: CstDatetime
 
     model_config = {"from_attributes": True}
 
+    @classmethod
+    def from_orm_with_docx(cls, msg: "Message") -> "MessageResponse":
+        """从 ORM Message 构造，自动生成 docx_url"""
+        docx_url = None
+        if msg.role == "assistant" and msg.document_id:
+            docx_url = f"/api/v1/documents/{msg.document_id}/export-docx"
+        return cls(
+            id=msg.id,
+            conversation_id=msg.conversation_id,
+            role=msg.role,
+            content=msg.content,
+            document_id=msg.document_id,
+            docx_url=docx_url,
+            created_at=msg.created_at,
+        )
+
 
 class MessageWithDocumentResponse(MessageResponse):
     """带文档的消息响应"""
-    document: "DocumentResponse | None" = None
+    document: "DocumentWithCitationsResponse | None" = None
 
 
 class ConversationBase(BaseModel):
@@ -87,5 +104,5 @@ class ConversationListResponse(BaseModel):
 
 
 # 前向引用
-from app.schemas.document import DocumentResponse
+from app.schemas.document import DocumentResponse, DocumentWithCitationsResponse
 from app.schemas.citation import CitationResponse

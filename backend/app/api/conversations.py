@@ -219,7 +219,8 @@ async def list_messages(
         .order_by(Message.created_at)
     )
     messages = result.scalars().all()
-    return messages
+    # 使用 from_orm_with_docx 自动生成 docx_url
+    return [MessageResponse.from_orm_with_docx(m) for m in messages]
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=SendMessageResponse)
@@ -287,11 +288,23 @@ async def send_message(
         logger.error("dify_call_failed", error=str(e), conversation_id=str(conversation_id))
         ai_content = f"⚠️ 调用 AI 服务失败：{str(e)}\n\n请检查 Dify 服务是否正常运行，或稍后重试。"
 
-    # 创建 AI 回复
+    # 创建 AI 回复 + Document 实体
+    auto_title = data.content[:30].replace('\n', ' ').strip() or "AI 回复"
+    document = Document(
+        conversation_id=conversation_id,
+        title=auto_title,
+        content_html=ai_content,
+        content_markdown=ai_content,
+    )
+    db.add(document)
+    await db.flush()
+    await db.refresh(document)
+
     ai_message = Message(
         conversation_id=conversation_id,
         role="assistant",
         content=ai_content,
+        document_id=document.id,
     )
     db.add(ai_message)
     await db.flush()
@@ -376,6 +389,7 @@ async def stream_message(
         full_answer = []
         has_error = False
         ai_message_id = None
+        ai_message = None  # 闭包外初始化，避免 done 事件中引用未定义变量
 
         try:
             async for event_type, delta, extra_data in dify.chat_messages_stream(
@@ -392,6 +406,7 @@ async def stream_message(
 
                 if event_type in ("agent_message", "message") and delta:
                     full_answer.append(delta)
+                    logger.debug(f"[stream] delta len={len(delta)}, total_len={sum(len(x) for x in full_answer)}")
                     yield f"event: content_delta\ndata: {{\"delta\": {json.dumps(delta, ensure_ascii=False)}}}\n\n"
 
                 elif event_type == "message_end":
@@ -399,12 +414,28 @@ async def stream_message(
                     yield f"event: message_end\ndata: {{\"conversation_id\": \"{conv_id}\"}}\n\n"
 
             if not has_error:
-                # ── 2. 保存 AI 回复 ──
+                # ── 2. 保存 AI 回复 + 创建 Document 实体 ──
                 ai_content = "".join(full_answer) or "（AI 未返回内容，请检查 Dify 服务配置）"
+
+                # 创建 Document 实体（持久化附件，支持后续编辑/AI修改）
+                auto_title = content[:30].replace('\n', ' ').strip() or "AI 回复"
+                document = Document(
+                    conversation_id=conversation_id,
+                    title=auto_title,
+                    content_html=ai_content,  # Markdown 格式暂存 html 字段
+                    content_markdown=ai_content,
+                )
+                db.add(document)
+                await db.flush()
+                await db.refresh(document)
+                document_id = document.id
+
+                # 创建 AI 回复 Message，关联 document_id
                 ai_message = Message(
                     conversation_id=conversation_id,
                     role="assistant",
                     content=ai_content,
+                    document_id=document_id,
                 )
                 db.add(ai_message)
                 await db.flush()
@@ -416,6 +447,7 @@ async def stream_message(
                     conversation_id=str(conversation_id),
                     user_msg_id=str(user_message_id),
                     ai_msg_id=str(ai_message_id),
+                    document_id=str(document_id),
                     answer_len=len(ai_content),
                 )
 
@@ -424,12 +456,14 @@ async def stream_message(
             yield f"event: error\ndata: {{\"message\": {json.dumps(f'流式生成异常: {str(e)}', ensure_ascii=False)}}}\n\n"
             has_error = True
 
-        # 发送 done 事件（包含 message IDs + docx 导出链接）
-        # 使用相对路径，前端直接拼接在后端地址后
-        docx_url = f"/api/v1/conversations/{conversation_id}/messages/{ai_message_id}/export-docx" if ai_message_id else None
+        # 发送 done 事件（包含 message IDs + document_id + docx 导出链接）
+        # 使用 documents API 的导出路径（基于 Document 实体，非 Message）
+        _doc_id = ai_message.document_id if ai_message else None
+        docx_url = f"/api/v1/documents/{_doc_id}/export-docx" if _doc_id else None
         done_data = {
             "user_message_id": str(user_message_id),
             "ai_message_id": str(ai_message_id) if ai_message_id else None,
+            "document_id": str(_doc_id) if _doc_id else None,
             "docx_url": docx_url,
         }
         yield f"event: done\ndata: {json.dumps(done_data, ensure_ascii=False)}\n\n"
@@ -474,14 +508,19 @@ async def export_message_as_docx(
     # 从 Markdown 生成 docx bytes
     docx_bytes = markdown_to_docx_bytes(
         markdown_text=message.content,
-        title=message.conversation.title if hasattr(message, 'conversation') else "AI 回复",
+        title="AI 回复",
     )
 
     # 生成文件名（取对话标题前 30 字符）
     result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
     conv = result.scalar_one_or_none()
-    filename = (conv.title[:30] if conv else "document").replace("/", "-").replace("\\", "-") + ".docx"
+    safe_title = (conv.title[:30] if conv else "document").replace("/", "-").replace("\\", "-")
+    filename = safe_title + ".docx"
 
+    import urllib.parse
+
+    # 中文文件名需要 URL 编码（RFC 5987）
+    encoded_filename = urllib.parse.quote(filename)
     logger.info(
         "message_exported_as_docx",
         conversation_id=str(conversation_id),
@@ -493,7 +532,7 @@ async def export_message_as_docx(
         io.BytesIO(docx_bytes),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
             "Access-Control-Expose-Headers": "Content-Disposition",
         },
     )
