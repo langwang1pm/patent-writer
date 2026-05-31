@@ -408,6 +408,7 @@ async def stream_message(
                     full_answer.append(delta)
                     logger.debug(f"[stream] delta len={len(delta)}, total_len={sum(len(x) for x in full_answer)}")
                     yield f"event: content_delta\ndata: {{\"delta\": {json.dumps(delta, ensure_ascii=False)}}}\n\n"
+                    yield " \n"
 
                 elif event_type == "message_end":
                     conv_id = extra_data.get("conversation_id", "")
@@ -472,9 +473,11 @@ async def stream_message(
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-transform",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
+            "Transfer-Encoding": "chunked",
         },
     )
 
