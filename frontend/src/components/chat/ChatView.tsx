@@ -58,7 +58,8 @@ export default function ChatView() {
   const [showCitationPanel, setShowCitationPanel] = useState(true) // 默认显示引用面板
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const citationCount = useCitationStore((s) => s.citations.length)
+  const citations = useCitationStore((s) => s.citations)
+  const citationCount = citations.length
 
   // 处理引用标注点击事件（事件委托）
   const handleCitationClick = (e: React.MouseEvent) => {
@@ -78,30 +79,6 @@ export default function ChatView() {
         }
       }
     }
-  }
-
-  // 预处理AI消息内容，高亮引用标注
-  const processMessageContent = (content: string): string => {
-    if (!content) return ''
-    
-    // 转义HTML特殊字符
-    let processed = content
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;')
-    
-    // 将引用标注替换为高亮样式
-    processed = processed.replace(
-      /(\[引用来源[：:][^\]]+\])/g, 
-      '<span class="citation-mark" title="引用来源: $1">$1</span>'
-    )
-    
-    // 简单处理加粗
-    processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    
-    return processed
   }
 
   useChatCitations()
@@ -180,18 +157,23 @@ export default function ChatView() {
     <div className="h-full flex">
       {/* 左侧：对话区域 */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* 顶部工具栏 */}
-        {citationCount > 0 && (
-          <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-gray-500" />
-              <span className="text-sm text-gray-600">
-                引用来源
-              </span>
-              <span className="ml-1 text-xs bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded-full font-medium">
-                {citationCount}
-              </span>
-            </div>
+        {/* 顶部工具栏 - 始终显示 */}
+        <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">
+              对话窗口
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {citationCount > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">引用来源</span>
+                <span className="text-xs bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded-full font-medium">
+                  {citationCount}
+                </span>
+              </div>
+            )}
             <button
               onClick={() => setShowCitationPanel(!showCitationPanel)}
               className="text-xs text-primary-600 hover:text-primary-700 font-medium"
@@ -199,7 +181,7 @@ export default function ChatView() {
               {showCitationPanel ? '隐藏' : '显示'}引用面板
             </button>
           </div>
-        )}
+        </div>
         {/* 消息列表 */}
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
           {messages.map((message) => (
@@ -212,9 +194,9 @@ export default function ChatView() {
             >
               <div
                 className={cn(
-                  'max-w-2xl rounded-2xl px-4 py-3',
+                  'max-w-[85%] rounded-2xl px-4 py-3',
                   message.role === 'user'
-                    ? 'bg-primary-600 text-white'
+                    ? 'bg-primary-600 text-white ml-auto'
                     : 'bg-gray-100 text-gray-800'
                 )}
               >
@@ -226,13 +208,14 @@ export default function ChatView() {
                 {/* AI 消息 — Markdown 渲染 */}
                 {message.role === 'assistant' && (
                   <div 
-                    className="space-y-4 prose prose-sm max-w-none"
+                    className="space-y-4 prose prose-sm max-w-none markdown-body"
                     onClick={handleCitationClick}
                   >
-                    <div 
-                      className="markdown-content"
-                      dangerouslySetInnerHTML={{ __html: processMessageContent(message.content) }}
-                    />
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
 
                     {/* ── docx 附件卡片 ── */}
                     {message.docx_url && (
@@ -250,7 +233,7 @@ export default function ChatView() {
 
         {/* 流式加载指示器 — 根据阶段显示不同内容 */}
         {isStreaming && phaseConfig && (
-          <div className="flex justify-start">
+          <div className="flex justify-start px-4">
             <div className="bg-gray-100 rounded-2xl px-4 py-3">
               <div className="flex items-center gap-2.5 text-sm text-gray-500">
                 <span className="text-primary-500 flex-shrink-0">{phaseConfig.icon}</span>
@@ -266,58 +249,58 @@ export default function ChatView() {
         )}
 
         <div ref={messagesEndRef} />
-      </div>
 
-      {/* 输入框 */}
-      <div className="border-t border-gray-200 p-4 bg-white shrink-0">
-        <div className="max-w-2xl mx-auto">
-          <div
-            className={cn(
-              'flex items-end gap-3 border rounded-xl px-4 py-3 transition-all',
-              isStreaming
-                ? 'border-gray-200 bg-gray-50'
-                : 'border-gray-300 focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-100'
-            )}
-          >
-            <textarea
-              ref={textareaRef}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                isStreaming
-                  ? streamPhase === 'thinking'
-                    ? 'AI 正在检索知识库，请稍候…'
-                    : streamPhase === 'generating'
-                    ? 'AI 正在生成内容…'
-                    : '处理中…'
-                  : '描述你想编写/修改的文档内容...'
-              }
-              rows={1}
-              className="flex-1 resize-none text-sm outline-none bg-transparent placeholder-gray-400 max-h-32"
-              disabled={isStreaming}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!inputValue.trim() || isStreaming}
+        {/* 输入框 — 放在左侧对话区域内部，确保在底部 */}
+        <div className="border-t border-gray-200 p-4 bg-white shrink-0">
+          <div className="mx-4">
+            <div
               className={cn(
-                'p-2 rounded-lg transition-colors',
-                inputValue.trim() && !isStreaming
-                  ? 'bg-primary-600 text-white hover:bg-primary-700'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                'flex items-end gap-3 border rounded-xl px-4 py-3 transition-all',
+                isStreaming
+                  ? 'border-gray-200 bg-gray-50'
+                  : 'border-gray-300 focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-100'
               )}
             >
-              <Send className="w-4 h-4" />
-            </button>
+              <textarea
+                ref={textareaRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  isStreaming
+                    ? streamPhase === 'thinking'
+                      ? 'AI 正在检索知识库，请稍候…'
+                      : streamPhase === 'generating'
+                      ? 'AI 正在生成内容…'
+                      : '处理中…'
+                    : '描述你想编写/修改的文档内容...'
+                }
+                rows={1}
+                className="flex-1 resize-none text-sm outline-none bg-transparent placeholder-gray-400 max-h-32"
+                disabled={isStreaming}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!inputValue.trim() || isStreaming}
+                className={cn(
+                  'p-2 rounded-lg transition-colors',
+                  inputValue.trim() && !isStreaming
+                    ? 'bg-primary-600 text-white hover:bg-primary-700'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                )}
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-2 text-center">
+              按 Enter 发送，Shift + Enter 换行
+            </p>
           </div>
-          <p className="text-xs text-gray-400 mt-2 text-center">
-            按 Enter 发送，Shift + Enter 换行
-          </p>
         </div>
       </div>
 
       {/* 右侧：引用面板 */}
-      {showCitationPanel && <CitationPanel />}
+      {showCitationPanel && <CitationPanel isOpen={showCitationPanel} onClose={() => setShowCitationPanel(false)} />}
     </div>
   )
 }

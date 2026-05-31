@@ -34,11 +34,8 @@ export default function CitationPanel({
     }
   }, [activeCitationId])
 
-  // 如果没有引用数据，不显示面板
-  if (citations.length === 0) return null
-
   return (
-    <aside ref={panelRef} className="w-72 bg-white border-l border-gray-200 flex flex-col shrink-0 overflow-hidden">
+    <aside ref={panelRef} className="w-80 bg-white border-l border-gray-200 flex flex-col shrink-0 overflow-hidden">
       {/* 标题栏 */}
       <div className="h-11 px-4 flex items-center border-b border-gray-200 shrink-0 bg-gray-50/50">
         <BookOpen className="w-4 h-4 text-gray-500 mr-1.5" />
@@ -140,14 +137,12 @@ export default function CitationPanel({
         )}
       </div>
 
-      {/* 底部提示 */}
-      {citations.length > 0 && (
-        <div className="px-4 py-2.5 border-t border-gray-200 bg-gray-50/80 shrink-0">
-          <p className="text-[11px] text-gray-400 leading-relaxed">
-            点击引用卡片查看详情
-          </p>
-        </div>
-      )}
+      {/* 底部提示 - 始终显示 */}
+      <div className="px-4 py-2.5 border-t border-gray-200 bg-gray-50/80 shrink-0">
+        <p className="text-[11px] text-gray-400 leading-relaxed">
+          {citations.length > 0 ? '点击引用卡片查看详情' : '引用内容将在此显示'}
+        </p>
+      </div>
     </aside>
   )
 }
