@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Send, FileText, Plus, Search, Sparkles } from 'lucide-react'
+import { Send, FileText, Plus, Search, Sparkles, BookOpen } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -8,6 +8,10 @@ import { useConversationStore, type StreamPhase } from '@/stores/conversationSto
 import { useKnowledgeStore } from '@/stores/knowledgeStore'
 import { cn } from '@/utils/cn'
 import FileAttachment from '@/components/chat/FileAttachment'
+import { useChatCitations } from '@/hooks/useChatCitations'
+import CitationPanel from '@/components/layout/CitationPanel'
+import { useCitationStore } from '@/stores/citationStore'
+
 
 /** 流式阶段对应的提示信息 */
 const STREAM_PHASE_CONFIG: Record<
@@ -51,9 +55,56 @@ export default function ChatView() {
   } = useConversationStore()
   const currentConfigId = useKnowledgeStore((s) => (s as any).currentConfigId ?? null)
   const [inputValue, setInputValue] = useState('')
+  const [showCitationPanel, setShowCitationPanel] = useState(true) // 默认显示引用面板
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const citationCount = useCitationStore((s) => s.citations.length)
 
+  // 处理引用标注点击事件（事件委托）
+  const handleCitationClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (target.classList.contains('citation-mark')) {
+      const citationText = target.textContent || ''
+      const match = citationText.match(/\[引用来源[：:]\s*([^\]]+)\]/)
+      if (match) {
+        const sourceName = match[1]
+        const citationStore = useCitationStore.getState()
+        const citation = citationStore.citations.find(c => 
+          c.source_name.includes(sourceName.split(' - ')[0])
+        )
+        if (citation) {
+          citationStore.setActiveCitation(citation.id)
+          // 这里可以添加滚动到对应卡片的逻辑
+        }
+      }
+    }
+  }
+
+  // 预处理AI消息内容，高亮引用标注
+  const processMessageContent = (content: string): string => {
+    if (!content) return ''
+    
+    // 转义HTML特殊字符
+    let processed = content
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+    
+    // 将引用标注替换为高亮样式
+    processed = processed.replace(
+      /(\[引用来源[：:][^\]]+\])/g, 
+      '<span class="citation-mark" title="引用来源: $1">$1</span>'
+    )
+    
+    // 简单处理加粗
+    processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    
+    return processed
+  }
+
+  useChatCitations()
   // 监听路由变化
   useEffect(() => {
     if (conversationId) {
@@ -126,89 +177,76 @@ export default function ChatView() {
       : null
 
   return (
-    <div className="h-full flex flex-col">
-      {/* 消息列表 */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={cn(
-              'flex',
-              message.role === 'user' ? 'justify-end' : 'justify-start'
-            )}
-          >
+    <div className="h-full flex">
+      {/* 左侧：对话区域 */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* 顶部工具栏 */}
+        {citationCount > 0 && (
+          <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-600">
+                引用来源
+              </span>
+              <span className="ml-1 text-xs bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded-full font-medium">
+                {citationCount}
+              </span>
+            </div>
+            <button
+              onClick={() => setShowCitationPanel(!showCitationPanel)}
+              className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+            >
+              {showCitationPanel ? '隐藏' : '显示'}引用面板
+            </button>
+          </div>
+        )}
+        {/* 消息列表 */}
+        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
+          {messages.map((message) => (
             <div
+              key={message.id}
               className={cn(
-                'max-w-2xl rounded-2xl px-4 py-3',
-                message.role === 'user'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-100 text-gray-800'
+                'flex',
+                message.role === 'user' ? 'justify-end' : 'justify-start'
               )}
             >
-              {/* 用户消息 */}
-              {message.role === 'user' && (
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-              )}
+              <div
+                className={cn(
+                  'max-w-2xl rounded-2xl px-4 py-3',
+                  message.role === 'user'
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-100 text-gray-800'
+                )}
+              >
+                {/* 用户消息 */}
+                {message.role === 'user' && (
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                )}
 
-              {/* AI 消息 — Markdown 渲染 */}
-              {message.role === 'assistant' && (
-                <div className="space-y-4 prose prose-sm max-w-none">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkBreaks]}
-                    components={{
-                      h1: ({ children }) => <h1 className="text-lg font-bold mt-4 mb-2">{children}</h1>,
-                      h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-2">{children}</h2>,
-                      h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>,
-                      h4: ({ children }) => <h4 className="text-sm font-semibold mt-2 mb-1">{children}</h4>,
-                      p: ({ children }) => <p className="mb-2 leading-relaxed">{children}</p>,
-                      ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-0.5">{children}</ul>,
-                      ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-0.5">{children}</ol>,
-                      li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                      code: ({ className, children }) => {
-                        const isInline = !className
-                        return isInline
-                          ? <code className="bg-gray-200 px-1 py-0.5 rounded text-xs font-mono">{children}</code>
-                          : <code className={cn("block bg-gray-100 p-2 rounded text-xs font-mono overflow-x-auto", className)}>{children}</code>
-                      },
-                      pre: ({ children }) => <pre className="bg-gray-100 p-3 rounded overflow-x-auto mb-2">{children}</pre>,
-                      blockquote: ({ children }) => (
-                        <blockquote className="border-l-4 border-gray-300 pl-3 italic text-gray-600 my-2">
-                          {children}
-                        </blockquote>
-                      ),
-                      table: ({ children }) => (
-                        <div className="overflow-x-auto my-2">
-                          <table className="min-w-full border-collapse border border-gray-300 text-xs">
-                            {children}
-                          </table>
-                        </div>
-                      ),
-                      th: ({ children }) => (
-                        <th className="border border-gray-300 px-2 py-1 bg-gray-100 font-semibold">
-                          {children}
-                        </th>
-                      ),
-                      td: ({ children }) => (
-                        <td className="border border-gray-300 px-2 py-1">{children}</td>
-                      ),
-                    }}
+                {/* AI 消息 — Markdown 渲染 */}
+                {message.role === 'assistant' && (
+                  <div 
+                    className="space-y-4 prose prose-sm max-w-none"
+                    onClick={handleCitationClick}
                   >
-                    {message.content}
-                  </ReactMarkdown>
-
-                  {/* ── docx 附件卡片 ── */}
-                  {message.docx_url && (
-                    <FileAttachment
-                      fileName={`文档-${message.id.slice(0, 8)}.docx`}
-                      fileUrl={message.docx_url}
+                    <div 
+                      className="markdown-content"
+                      dangerouslySetInnerHTML={{ __html: processMessageContent(message.content) }}
                     />
-                  )}
-                </div>
-              )}
+
+                    {/* ── docx 附件卡片 ── */}
+                    {message.docx_url && (
+                      <FileAttachment
+                        fileName={`文档-${message.id.slice(0, 8)}.docx`}
+                        fileUrl={message.docx_url}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
 
         {/* 流式加载指示器 — 根据阶段显示不同内容 */}
         {isStreaming && phaseConfig && (
@@ -277,6 +315,9 @@ export default function ChatView() {
           </p>
         </div>
       </div>
+
+      {/* 右侧：引用面板 */}
+      {showCitationPanel && <CitationPanel />}
     </div>
   )
 }

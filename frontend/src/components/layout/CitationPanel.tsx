@@ -1,10 +1,12 @@
 import { BookOpen, ChevronRight, ExternalLink, MapPin, Quote } from 'lucide-react'
 import { useCitationStore } from '@/stores/citationStore'
 import { cn } from '@/utils/cn'
+import { useEffect, useRef } from 'react'
 
 interface CitationPanelProps {
   /** 面板是否可见 */
   isOpen: boolean
+  onClose: () => void
   /** 标题（默认"引用来源"） */
   title?: string
   /** 空状态提示文字 */
@@ -13,18 +15,30 @@ interface CitationPanelProps {
   emptySubtext?: string
 }
 
+
 export default function CitationPanel({
-  isOpen,
   title = '引用来源',
   emptyText = '暂无引用',
   emptySubtext = '生成的文档将显示引用来源',
 }: CitationPanelProps) {
   const { citations, activeCitationId, setActiveCitation } = useCitationStore()
+  const panelRef = useRef<HTMLDivElement>(null)
 
-  if (!isOpen) return null
+  // 当 activeCitationId 变化时，滚动到对应卡片
+  useEffect(() => {
+    if (activeCitationId && panelRef.current) {
+      const activeCard = panelRef.current.querySelector(`[data-citation-id="${activeCitationId}"]`)
+      if (activeCard) {
+        activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    }
+  }, [activeCitationId])
+
+  // 如果没有引用数据，不显示面板
+  if (citations.length === 0) return null
 
   return (
-    <aside className="w-72 bg-white border-l border-gray-200 flex flex-col shrink-0 overflow-hidden">
+    <aside ref={panelRef} className="w-72 bg-white border-l border-gray-200 flex flex-col shrink-0 overflow-hidden">
       {/* 标题栏 */}
       <div className="h-11 px-4 flex items-center border-b border-gray-200 shrink-0 bg-gray-50/50">
         <BookOpen className="w-4 h-4 text-gray-500 mr-1.5" />
@@ -48,6 +62,7 @@ export default function CitationPanel({
           citations.map((citation, index) => (
             <div
               key={citation.id}
+              data-citation-id={citation.id}
               className={cn(
                 'group rounded-lg border transition-all cursor-pointer',
                 activeCitationId === citation.id
