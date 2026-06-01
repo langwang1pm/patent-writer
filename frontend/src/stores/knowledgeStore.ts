@@ -141,10 +141,10 @@ export const useKnowledgeStore = create<KnowledgeState>()(
     createConfig: async (config: Partial<KnowledgeConfig>) => {
       set({ isLoading: true, error: null })
       try {
-        await knowledgeConfigApi.create(config)
+        await knowledgeConfigApi.createKnowledgeConfig(config as Omit<KnowledgeConfig, 'id' | 'created_at' | 'updated_at'>)
         set({ isLoading: false })
         // 刷新配置列表
-        const data = await knowledgeConfigApi.list()
+        const data = await knowledgeConfigApi.listKnowledgeConfigs()
         set({ configs: data.items || [] })
       } catch (error) {
         console.error('创建配置失败:', error)
@@ -155,10 +155,10 @@ export const useKnowledgeStore = create<KnowledgeState>()(
     updateConfig: async (id: string, config: Partial<KnowledgeConfig>) => {
       set({ isLoading: true, error: null })
       try {
-        await knowledgeConfigApi.update(id, config)
+        await knowledgeConfigApi.updateKnowledgeConfig(Number(id), config)
         set({ isLoading: false })
         // 刷新配置列表
-        const data = await knowledgeConfigApi.list()
+        const data = await knowledgeConfigApi.listKnowledgeConfigs()
         set({ configs: data.items || [] })
       } catch (error) {
         console.error('更新配置失败:', error)
@@ -169,7 +169,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
     deleteConfig: async (id: string) => {
       set({ error: null })
       try {
-        await knowledgeConfigApi.delete(id)
+        await knowledgeConfigApi.deleteKnowledgeConfig(Number(id))
         // 从列表中移除
         const state = get()
         set({ configs: state.configs.filter((c) => c.id !== id) })
@@ -182,7 +182,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
     testConnection: async (id: string) => {
       set({ error: null })
       try {
-        await knowledgeConfigApi.test(id)
+        await knowledgeConfigApi.testKnowledgeConfigConnection(Number(id))
       } catch (error) {
         console.error('测试连接失败:', error)
         set({ error: error instanceof Error ? error.message : '测试失败' })
