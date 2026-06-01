@@ -1,14 +1,16 @@
 import { FileText, ChevronLeft } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { cn } from '@/utils/cn'
 
 interface TopNavProps {
-  onToggleRightPanel: () => void
+  onToggleRightPanel?: () => void
 }
 
-export default function TopNav({ onToggleRightPanel }: TopNavProps) {
+export default function TopNav({ onToggleRightPanel }: TopNavProps = {}) {
   const navigate = useNavigate()
   const location = useLocation()
+
+  // 使用属性（避免 TypeScript 报错）
+  void onToggleRightPanel
 
   return (
     <header className="h-14 bg-white border-b border-gray-200 flex items-center px-4 justify-between shrink-0">

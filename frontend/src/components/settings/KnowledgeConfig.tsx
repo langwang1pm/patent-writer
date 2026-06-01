@@ -1,13 +1,12 @@
 import { useState } from 'react'
-import { Plus, Edit2, Trash2, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { Plus, Trash2, CheckCircle, Loader2 } from 'lucide-react'
 import { useKnowledgeStore } from '@/stores/knowledgeStore'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 
 export default function KnowledgeConfig() {
-  const { configs, createConfig, updateConfig, deleteConfig, testConnection, isLoading } = useKnowledgeStore()
+  const { configs, createConfig, deleteConfig, testConnection, isLoading } = useKnowledgeStore()
   const [isAdding, setIsAdding] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -80,7 +79,7 @@ export default function KnowledgeConfig() {
             <p className="text-sm mt-1">点击上方按钮添加</p>
           </div>
         ) : (
-          configs.map((config) => (
+          configs.map((config: any) => (
             <div key={config.id} className="p-4 border border-gray-200 rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
@@ -98,13 +97,6 @@ export default function KnowledgeConfig() {
                     title="测试连接"
                   >
                     <CheckCircle className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setEditingId(config.id)}
-                    className="p-1 text-gray-400 hover:text-gray-600"
-                    title="编辑"
-                  >
-                    <Edit2 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => deleteConfig(config.id)}

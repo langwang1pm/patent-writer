@@ -20,7 +20,7 @@ export default function OnlyOfficeViewer() {
 
   const fileKey = searchParams.get('fileKey') || ''
   const fileName = searchParams.get('fileName') || '文档'
-  const [mode, setMode] = useState<'view' | 'edit'>(
+  const [mode] = useState<'view' | 'edit'>(
     searchParams.get('mode') === 'edit' ? 'edit' : 'view',
   )
   const [isLoading, setIsLoading] = useState(true)

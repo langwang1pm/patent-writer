@@ -1,7 +1,5 @@
 import { api } from './api'
 
-const API_BASE = '/api/v1'
-
 export interface OnlyOfficeEditorConfig {
   doc_server_url: string
   config: {

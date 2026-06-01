@@ -1,4 +1,4 @@
-import { BookOpen, ChevronRight, ExternalLink, MapPin, Quote } from 'lucide-react'
+import { BookOpen, ExternalLink, MapPin, Quote } from 'lucide-react'
 import { useCitationStore } from '@/stores/citationStore'
 import { cn } from '@/utils/cn'
 import { useEffect, useRef, useCallback } from 'react'

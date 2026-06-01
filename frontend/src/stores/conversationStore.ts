@@ -42,6 +42,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   error: null,
   hasMore: true,
   currentPage: 1,
+  total: 0,
 
   // 首次加载（重置列表）
   fetchConversations: async () => {

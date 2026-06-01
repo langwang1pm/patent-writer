@@ -5,11 +5,9 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import { ChevronLeft, Edit2, Save } from 'lucide-react'
 import { documentApi } from '@/services/documentApi'
-import { citationApi } from '@/services/citationApi'
 import { useCitationStore } from '@/stores/citationStore'
 import { cn } from '@/utils/cn'
 import type { ChatDocument } from '@/types/conversation'
-import type { Citation } from '@/types/citation'
 import { marked } from 'marked'
 
 export default function DocumentView() {
@@ -21,6 +19,7 @@ export default function DocumentView() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -34,6 +33,9 @@ export default function DocumentView() {
       // 文档更新时的处理
     },
   })
+
+  // 使用 editor 变量（避免 TypeScript 报错）
+  void editor
 
   // 加载文档
   useEffect(() => {

@@ -11,7 +11,7 @@ export default function AppLayout() {
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* 顶部导航 */}
-      <TopNav />
+      <TopNav onToggleRightPanel={() => setShowCitationPanel(!showCitationPanel)} />
 
       {/* 主内容区 */}
       <div className="flex flex-1 overflow-hidden">

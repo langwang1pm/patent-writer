@@ -12,7 +12,6 @@ export default function Sidebar() {
   const {
     conversations,
     fetchConversations,
-    loadMoreConversations,
     searchConversations,
     createConversation,
     deleteConversation,

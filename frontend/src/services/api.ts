@@ -10,18 +10,16 @@ export const api = ky.create({
   },
 })
 
-// 响应拦截器
 api.extend({
   hooks: {
     afterResponse: [
-      (_request, _options, response) => {
+      async (_request, _options, response) => {
         if (!response.ok) {
-          return response.json().then((data) => {
-            const error = new Error(data.message || '请求失败')
-            ;(error as any).response = response
-            ;(error as any).data = data
-            throw error
-          })
+          const data: any = await response.json()
+          const error = new Error(data.message || '请求失败')
+          ;(error as any).response = response
+          ;(error as any).data = data
+          throw error
         }
         return response
       },

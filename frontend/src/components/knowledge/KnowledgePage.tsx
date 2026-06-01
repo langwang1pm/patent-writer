@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Upload, Search, FileText, Trash2, Loader2,
   CheckCircle, Clock, AlertCircle, PauseCircle,
@@ -9,7 +9,7 @@ import { knowledgeApi } from '@/services/knowledgeApi'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import Pagination from '@/components/ui/Pagination'
-import type { KnowledgeConfigListResponse } from '@/types/knowledge'
+// import type { KnowledgeConfig as KnowledgeConfigType } from '@/types/knowledge' // 未使用，已注释
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = {
   available:  { label: '可用', color: 'text-green-700 bg-green-50',  icon: CheckCircle },
@@ -61,14 +61,6 @@ export default function KnowledgePage() {
 
   const [searchQuery, setSearchQuery] = useState('')
   const [showUploadModal, setShowUploadModal] = useState(false)
-  const [configs, setConfigs] = useState<KnowledgeConfigListResponse | null>(null)
-
-  // 获取配置列表，拿到默认 config id
-  useEffect(() => {
-    knowledgeApi.listConfigs().then(setConfigs).catch(() => setConfigs(null))
-  }, [])
-
-  const defaultConfigId = configs?.default_id ?? configs?.items?.[0]?.id ?? undefined
 
   // 初始加载（带分页参数）
   useEffect(() => {
@@ -155,13 +147,6 @@ export default function KnowledgePage() {
       year:'numeric', month:'2-digit', day:'2-digit',
       hour:'2-digit', minute:'2-digit',
     })
-  }
-
-  const fmtCount = (n: number | undefined) => {
-    if (n == null) return '-'
-    if (n >= 10000) return `${(n / 10000).toFixed(1)}万字`
-    if (n >= 1000)  return `${(n / 1000).toFixed(1)}k`
-    return `${n}`
   }
 
   return (

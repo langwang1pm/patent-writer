@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
-import { KnowledgeFile, KnowledgeState } from '@/types/knowledge'
+import { KnowledgeState, KnowledgeConfig } from '@/types/knowledge'
 import { knowledgeApi } from '@/services/knowledgeApi'
+import { knowledgeConfigApi } from '@/services/knowledgeConfigApi'
 
 // 默认分页配置
 const DEFAULT_PAGE_SIZE = 10
@@ -10,6 +11,7 @@ const DEFAULT_PAGE = 1
 export const useKnowledgeStore = create<KnowledgeState>()(
   devtools((set, get) => ({
     files: [],
+    configs: [],
     isLoading: false,
     isUploading: false,
     error: null,
@@ -134,6 +136,58 @@ export const useKnowledgeStore = create<KnowledgeState>()(
           page: DEFAULT_PAGE, // 切换每页数量时重置到第一页
         },
       }))
+    },
+    // 知识库配置相关方法
+    createConfig: async (config: Partial<KnowledgeConfig>) => {
+      set({ isLoading: true, error: null })
+      try {
+        await knowledgeConfigApi.create(config)
+        set({ isLoading: false })
+        // 刷新配置列表
+        const data = await knowledgeConfigApi.list()
+        set({ configs: data.items || [] })
+      } catch (error) {
+        console.error('创建配置失败:', error)
+        set({ isLoading: false, error: error instanceof Error ? error.message : '创建失败' })
+        throw error
+      }
+    },
+    updateConfig: async (id: string, config: Partial<KnowledgeConfig>) => {
+      set({ isLoading: true, error: null })
+      try {
+        await knowledgeConfigApi.update(id, config)
+        set({ isLoading: false })
+        // 刷新配置列表
+        const data = await knowledgeConfigApi.list()
+        set({ configs: data.items || [] })
+      } catch (error) {
+        console.error('更新配置失败:', error)
+        set({ isLoading: false, error: error instanceof Error ? error.message : '更新失败' })
+        throw error
+      }
+    },
+    deleteConfig: async (id: string) => {
+      set({ error: null })
+      try {
+        await knowledgeConfigApi.delete(id)
+        // 从列表中移除
+        const state = get()
+        set({ configs: state.configs.filter((c) => c.id !== id) })
+      } catch (error) {
+        console.error('删除配置失败:', error)
+        set({ error: error instanceof Error ? error.message : '删除失败' })
+        throw error
+      }
+    },
+    testConnection: async (id: string) => {
+      set({ error: null })
+      try {
+        await knowledgeConfigApi.test(id)
+      } catch (error) {
+        console.error('测试连接失败:', error)
+        set({ error: error instanceof Error ? error.message : '测试失败' })
+        throw error
+      }
     },
   }))
 )

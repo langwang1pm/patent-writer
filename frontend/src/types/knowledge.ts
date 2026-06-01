@@ -39,6 +39,12 @@ export interface KnowledgeState {
     total: number
     totalPages: number
   }
+  // 知识库配置相关
+  configs: KnowledgeConfig[]
+  createConfig: (config: Partial<KnowledgeConfig>) => Promise<void>
+  updateConfig: (id: string, config: Partial<KnowledgeConfig>) => Promise<void>
+  deleteConfig: (id: string) => Promise<void>
+  testConnection: (id: string) => Promise<void>
 
   fetchFiles: (page?: number, pageSize?: number) => Promise<void>
   uploadFile: (file: File) => Promise<void>
