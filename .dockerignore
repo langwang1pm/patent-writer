@@ -1,0 +1,70 @@
+# Python虚拟环境
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/*.pyd
+backend/.Python
+backend/env/
+backend/ENV/
+
+# Node模块
+frontend/node_modules/
+frontend/dist/
+frontend/.nuxt/
+frontend/.next/
+frontend/.cache/
+
+# IDE和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 日志文件
+*.log
+logs/
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 环境变量文件（保护敏感信息）
+.env.backup
+.<INTERNAL_HOST>.env
+
+# 测试覆盖率
+htmlcov/
+.coverage
+.coverage.*
+coverage/
+*.cover
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# 构建产物
+build/
+dist/
+
+# Git相关
+.git/
+.gitignore
+
+# Docker相关
+.dockerignore
+docker-compose.override.yml
+
+# 文档（可选）
+*.md
+docs/
+README.md
+DEPLOYMENT_GUIDE.md
+DEPLOYMENT_SUMMARY.md
+PROJECT_CHECKLIST.md
+SIMPLE_DEPLOY_GUIDE.md

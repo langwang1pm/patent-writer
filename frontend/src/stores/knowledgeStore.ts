@@ -145,7 +145,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
         set({ isLoading: false })
         // 刷新配置列表
         const data = await knowledgeConfigApi.listKnowledgeConfigs()
-        set({ configs: data.items || [] })
+        set({ configs: data || [] })
       } catch (error) {
         console.error('创建配置失败:', error)
         set({ isLoading: false, error: error instanceof Error ? error.message : '创建失败' })
@@ -155,11 +155,11 @@ export const useKnowledgeStore = create<KnowledgeState>()(
     updateConfig: async (id: string, config: Partial<KnowledgeConfig>) => {
       set({ isLoading: true, error: null })
       try {
-        await knowledgeConfigApi.updateKnowledgeConfig(Number(id), config)
+        await knowledgeConfigApi.updateKnowledgeConfig(id, config)
         set({ isLoading: false })
         // 刷新配置列表
         const data = await knowledgeConfigApi.listKnowledgeConfigs()
-        set({ configs: data.items || [] })
+        set({ configs: data || [] })
       } catch (error) {
         console.error('更新配置失败:', error)
         set({ isLoading: false, error: error instanceof Error ? error.message : '更新失败' })
@@ -169,7 +169,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
     deleteConfig: async (id: string) => {
       set({ error: null })
       try {
-        await knowledgeConfigApi.deleteKnowledgeConfig(Number(id))
+        await knowledgeConfigApi.deleteKnowledgeConfig(id)
         // 从列表中移除
         const state = get()
         set({ configs: state.configs.filter((c) => c.id !== id) })
@@ -182,7 +182,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
     testConnection: async (id: string) => {
       set({ error: null })
       try {
-        await knowledgeConfigApi.testKnowledgeConfigConnection(Number(id))
+        await knowledgeConfigApi.testKnowledgeConfigConnection(id)
       } catch (error) {
         console.error('测试连接失败:', error)
         set({ error: error instanceof Error ? error.message : '测试失败' })
