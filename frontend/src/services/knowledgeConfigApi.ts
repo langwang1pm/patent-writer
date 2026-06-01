@@ -59,3 +59,14 @@ export async function testKnowledgeConfigConnection(id: number): Promise<{ succe
   const data = await api.post<{ success: boolean; message: string }>(`/knowledge/configs/${id}/test`).json();
   return data;
 }
+
+/**
+ * 导出 API 对象（供 store 使用）
+ */
+export const knowledgeConfigApi = {
+  listKnowledgeConfigs,
+  createKnowledgeConfig,
+  updateKnowledgeConfig,
+  deleteKnowledgeConfig,
+  testKnowledgeConfigConnection,
+};
