@@ -10,12 +10,18 @@ interface ConversationState {
   currentConversationId: string | null
   messages: Message[]
   isLoading: boolean
+  isLoadingMore: boolean    // 滚动加载中
   isStreaming: boolean
   streamPhase: StreamPhase  // 新增：流式阶段
   error: string | null
+  hasMore: boolean          // 是否有更多可加载
+  currentPage: number       // 当前页码（用于追加加载）
+  total: number             // 会话总数
 
   // Actions
-  fetchConversations: () => Promise<void>
+  fetchConversations: () => Promise<void>        // 首次加载（重置）
+  loadMoreConversations: () => Promise<void>      // 滚动加载更多（追加）
+  searchConversations: (query: string) => Promise<void>  // 搜索（后端全量）
   createConversation: (title?: string, knowledgeConfigId?: string) => Promise<Conversation>
   setCurrentConversation: (id: string | null) => void
   fetchMessages: (conversationId: string) => Promise<void>
@@ -30,15 +36,62 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   currentConversationId: null,
   messages: [],
   isLoading: false,
+  isLoadingMore: false,
   isStreaming: false,
   streamPhase: 'idle',
   error: null,
+  hasMore: true,
+  currentPage: 1,
 
+  // 首次加载（重置列表）
   fetchConversations: async () => {
-    set({ isLoading: true, error: null })
+    set({ isLoading: true, error: null, currentPage: 1, hasMore: true, total: 0 })
     try {
-      const response = await conversationApi.list({ page_size: 100 })
-      set({ conversations: response.items, isLoading: false })
+      const response = await conversationApi.list({ page: 1, page_size: 20 })
+      set({
+        conversations: response.items,
+        total: response.total,
+        isLoading: false,
+        hasMore: response.items.length < response.total,
+        currentPage: 1,
+      })
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+    }
+  },
+
+  // 滚动加载更多（追加）
+  loadMoreConversations: async () => {
+    const { isLoadingMore, hasMore, currentPage, conversations } = get()
+    if (isLoadingMore || !hasMore) return
+
+    set({ isLoadingMore: true, error: null })
+    try {
+      const nextPage = currentPage + 1
+      const response = await conversationApi.list({ page: nextPage, page_size: 10 })
+      set({
+        conversations: [...conversations, ...response.items],
+        isLoadingMore: false,
+        hasMore: conversations.length + response.items.length < response.total,
+        currentPage: nextPage,
+      })
+    } catch (error) {
+      set({ error: (error as Error).message, isLoadingMore: false })
+    }
+  },
+
+  // 搜索（后端全量搜索，不走分页追加）
+  searchConversations: async (query: string) => {
+    if (!query.trim()) {
+      // 搜索词清空时恢复分页加载
+      get().fetchConversations()
+      return
+    }
+    set({ isLoading: true, error: null, currentPage: 1, hasMore: false })
+    try {
+      // 搜索范围为全部会话，page_size 设大一些（比如100）
+      const response = await conversationApi.list({ page: 1, page_size: 100, search: query })
+      set({ conversations: response.items, isLoading: false, hasMore: false })
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
     }
@@ -49,10 +102,13 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     try {
       const conversation = await conversationApi.create(title, knowledgeConfigId)
       set((state) => ({
+        // 新建对话插入到列表最前面
         conversations: [conversation, ...state.conversations],
         currentConversationId: conversation.id,
         messages: [],
         isLoading: false,
+        // 如果有新对话，说明还有更多，重新标记 hasMore
+        hasMore: state.hasMore || state.conversations.length >= state.currentPage * 10,
       }))
       return conversation
     } catch (error) {

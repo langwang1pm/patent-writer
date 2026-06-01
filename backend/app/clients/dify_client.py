@@ -313,10 +313,26 @@ class DifyClient:
                         except json.JSONDecodeError:
                             continue
 
+                        # ── TEMP LOG ── write raw SSE event to C:\temp\dify_sse_events.jsonl ──
+                        import os as _os_
+                        _log_dir = r"C:\temp"
+                        _os_.makedirs(_log_dir, exist_ok=True)
+                        with open(_os_.path.join(_log_dir, "dify_sse_events.jsonl"), "a", encoding="utf-8") as _lf:
+                            _lf.write(json.dumps(event, ensure_ascii=False) + "\n")
+
                         etype = event.get("event", "")
+
+                        # agent_message / message: delta text
                         if etype in ("agent_message", "message"):
                             yield (etype, event.get("answer", ""), event)
                         elif etype == "message_end":
+                            # Try to extract citation data from multiple possible locations
+                            citations_data = (
+                                event.get("metadata", {}).get("citations")
+                                or event.get("retriever_resources")
+                                or []
+                            )
+                            event["_citations"] = citations_data
                             yield ("message_end", "", event)
                         elif etype == "error":
                             yield ("error", event.get("message", ""), {})

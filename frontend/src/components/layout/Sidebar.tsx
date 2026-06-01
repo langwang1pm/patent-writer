@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Plus, Search, MessageSquare, MoreVertical, Trash2, Edit2, BookOpen, Loader2 } from 'lucide-react'
+import { Plus, Search, MessageSquare, Trash2, Edit2, BookOpen, Loader2 } from 'lucide-react'
 import { format, toZonedTime } from 'date-fns-tz'
 import { zhCN } from 'date-fns/locale'
 import { cn } from '@/utils/cn'
@@ -9,13 +9,28 @@ import { useConversationStore } from '@/stores/conversationStore'
 export default function Sidebar() {
   const navigate = useNavigate()
   const params = useParams()
-  const { conversations, fetchConversations, createConversation, deleteConversation, setCurrentConversation, currentConversationId, updateConversationTitle } = useConversationStore()
+  const {
+    conversations,
+    fetchConversations,
+    loadMoreConversations,
+    searchConversations,
+    createConversation,
+    deleteConversation,
+    setCurrentConversation,
+    currentConversationId,
+    updateConversationTitle,
+    hasMore,
+    isLoadingMore,
+  } = useConversationStore()
+
   const [searchQuery, setSearchQuery] = useState('')
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const editInputRef = useRef<HTMLInputElement>(null)
+  const [isCreating, setIsCreating] = useState(false)
 
+  // 首次加载
   useEffect(() => {
     fetchConversations()
   }, [fetchConversations])
@@ -27,7 +42,37 @@ export default function Sidebar() {
     }
   }, [params.conversationId, setCurrentConversation])
 
-  const [isCreating, setIsCreating] = useState(false)
+  // 滚动加载 sentinel
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const loadingRef = useRef(false)
+
+  // 始终通过 getState() 读取实时状态，避免闭包捕获旧值导致竞态
+  const handleScrollReachEnd = useCallback(async () => {
+    const state = useConversationStore.getState()
+    if (loadingRef.current || !state.hasMore || state.isLoadingMore || state.conversations.length === 0) return
+    loadingRef.current = true
+    try {
+      await state.loadMoreConversations()
+    } finally {
+      loadingRef.current = false
+    }
+  }, [])  // 空依赖，callback 不会因状态变化而重建，避免 IntersectionObserver 竞态
+
+  // 仅在搜索词变化时重新挂载 observer（非搜索模式下，observer 始终保持稳定）
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          handleScrollReachEnd()
+        }
+      },
+      { root: sentinel.parentElement, threshold: 0.1 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [handleScrollReachEnd])
 
   const handleCreateConversation = async () => {
     if (isCreating) return
@@ -73,9 +118,15 @@ export default function Sidebar() {
     }
   }, [renamingId])
 
-  const filteredConversations = conversations.filter((c) =>
-    c.title.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  // 搜索防抖
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      searchConversations(value)
+    }, 300)
+  }
 
   return (
     <aside className="w-64 bg-gray-100 border-r border-gray-200 flex flex-col shrink-0">
@@ -109,7 +160,7 @@ export default function Sidebar() {
             type="text"
             placeholder="搜索对话..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
@@ -118,12 +169,12 @@ export default function Sidebar() {
       {/* 对话列表 */}
       <div className="flex-1 overflow-y-auto px-2 pb-3">
         <div className="space-y-1">
-          {filteredConversations.length === 0 ? (
+          {conversations.length === 0 ? (
             <div className="text-center py-8 text-gray-500 text-sm">
               {searchQuery ? '未找到匹配的对话' : '暂无对话记录'}
             </div>
           ) : (
-            filteredConversations.map((conversation) => (
+            conversations.map((conversation) => (
               <div
                 key={conversation.id}
                 onMouseEnter={() => setHoveredId(conversation.id)}
@@ -198,6 +249,20 @@ export default function Sidebar() {
             ))
           )}
         </div>
+
+        {/* 滚动加载 sentinel */}
+        <div ref={sentinelRef} className="h-1" />
+
+        {/* 加载状态提示 */}
+        {isLoadingMore && (
+          <div className="flex items-center justify-center py-2">
+            <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+            <span className="ml-2 text-xs text-gray-400">加载中...</span>
+          </div>
+        )}
+        {!hasMore && conversations.length > 0 && !searchQuery && (
+          <div className="text-center py-2 text-xs text-gray-400">没有更多了</div>
+        )}
       </div>
     </aside>
   )

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 import { useConversationStore } from '@/stores/conversationStore'
 import { useCitationStore } from '@/stores/citationStore'
 
@@ -13,7 +13,7 @@ import { useCitationStore } from '@/stores/citationStore'
  * 返回去重的引用列表，按首次出现位置排序
  */
 
-const CITATION_SOURCE_PATTERN = /\[引用来源[：:]\s*([^\]]+)\]/g
+const CITATION_SOURCE_PATTERN = /【引用来源[：:]\s*([^】]+)】/g
 
 interface ParsedCitationRef {
   id: string
@@ -107,9 +107,9 @@ export function useChatCitations() {
     [parsedCitations]
   )
 
-  // 实时同步到 store
-  useMemo(() => {
-    setCitations(citationList as any)
+  // 实时同步到 store（用 useEffect 执行副作用，useMemo 不应用来触发副作用）
+  useEffect(() => {
+    setCitations(citationList)
   }, [citationList, setCitations])
 
   return {
