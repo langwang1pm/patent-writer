@@ -352,6 +352,41 @@ class DifyClient:
             logger.error("dify_chat_stream_error", error=error_str, error_type=error_type)
             yield ("error", error_str, {})
 
+    async def get_message(self, message_id: str) -> dict[str, Any] | None:
+        """获取 Dify 消息详情（含 retriever_resources）
+        
+        SSE 流的 message_end 事件中 retriever_resources 可能为空，
+        但通过 Messages REST API 可以获取完整的检索来源数据。
+        """
+        url = f"{self.base_url}/v1/messages/{message_id}"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                # 提取 retrieval_resources（Dify 不同版本字段名不同）
+                resources = (
+                    data.get("retriever_resources")
+                    or data.get("retrieval_resources")
+                    or []
+                )
+                logger.info(
+                    "dify_get_message",
+                    message_id=message_id,
+                    resources_count=len(resources),
+                )
+                # 同时写日志文件方便调试
+                import os as _os_
+                _log_dir = r"C:\temp"
+                _os_.makedirs(_log_dir, exist_ok=True)
+                with open(_os_.path.join(_log_dir, "dify_message_api.json"), "w", encoding="utf-8") as _lf:
+                    json.dump(data, _lf, ensure_ascii=False, indent=2)
+                return data
+        except Exception as e:
+            logger.error("dify_get_message_error", error=str(e), message_id=message_id)
+            return None
+
     async def check_health(self) -> bool:
         """健康检查：验证 Dify 服务连通性"""
         try:

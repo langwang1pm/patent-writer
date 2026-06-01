@@ -109,9 +109,10 @@ async def onlyoffice_callback(
     return {"error": 0}
 
 
-@router.get("/onlyoffice/file/{file_key:path}")
+@router.api_route("/onlyoffice/file/{file_key:path}", methods=["GET", "HEAD"])
 async def serve_file_for_onlyoffice(
     file_key: str,
+    request: Request = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
     """
@@ -119,6 +120,7 @@ async def serve_file_for_onlyoffice(
 
     OnlyOffice 服务器通过此 URL 下载文件内容。
     必须确保 OnlyOffice 服务器能访问此地址。
+    支持 GET（下载）和 HEAD（检查文件是否存在）方法。
     """
     file_path, file_name = await _resolve_file_path(file_key, db)
 
@@ -132,6 +134,18 @@ async def serve_file_for_onlyoffice(
 
     from urllib.parse import quote
     encoded_filename = quote(file_name, safe='')
+
+    # HEAD 请求只返回头信息，不返回内容
+    if request and request.method == "HEAD":
+        from fastapi.responses import Response
+        return Response(
+            status_code=200,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}",
+                "Content-Length": str(Path(file_path).stat().st_size),
+            }
+        )
 
     return FileResponse(
         path=str(file_path),

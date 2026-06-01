@@ -390,6 +390,7 @@ async def stream_message(
         has_error = False
         ai_message_id = None
         ai_message = None  # 闭包外初始化，避免 done 事件中引用未定义变量
+        dify_message_id = None  # Dify 返回的 message_id，用于后续补拉检索结果
 
         try:
             async for event_type, delta, extra_data in dify.chat_messages_stream(
@@ -412,6 +413,7 @@ async def stream_message(
 
                 elif event_type == "message_end":
                     conv_id = extra_data.get("conversation_id", "")
+                    dify_message_id = extra_data.get("message_id", "")
                     yield f"event: message_end\ndata: {{\"conversation_id\": \"{conv_id}\"}}\n\n"
 
             if not has_error:
@@ -452,6 +454,66 @@ async def stream_message(
                     answer_len=len(ai_content),
                 )
 
+                # ── 3. 补拉 Dify Messages API 获取检索来源 ──
+                citations_response = []
+                if dify_message_id:
+                    try:
+                        msg_detail = await dify.get_message(dify_message_id)
+                        if msg_detail:
+                            resources = (
+                                msg_detail.get("retriever_resources")
+                                or msg_detail.get("retrieval_resources")
+                                or []
+                            )
+                            logger.info(
+                                "dify_message_api_resources",
+                                message_id=dify_message_id,
+                                resources_count=len(resources),
+                            )
+                            if resources:
+                                # 将 Dify retriever_resources 转换为 RetrievedChunk 列表
+                                from app.clients.dify_client import RetrievedChunk
+                                chunks = []
+                                for idx, r in enumerate(resources):
+                                    chunk = RetrievedChunk(
+                                        content=r.get("content", ""),
+                                        source_name=r.get("document_name", r.get("name", f"来源{idx+1}")),
+                                        source_id=r.get("document_id", ""),
+                                        chunk_id=r.get("id", r.get("segment_id", "")),
+                                        score=float(r.get("score", 0)),
+                                        position=idx,
+                                    )
+                                    chunks.append(chunk)
+
+                                # 写入 Citation 表
+                                citation_svc = CitationService(db=db)
+                                created_citations = await citation_svc.create_citations_from_chunks(
+                                    document_id=document_id,
+                                    chunks=chunks,
+                                    content=ai_content,
+                                )
+                                citations_response = [
+                                    {
+                                        "id": str(c.id),
+                                        "ref_mark": c.ref_mark,
+                                        "source_name": c.source_name,
+                                        "source_id": c.source_id or "",
+                                        "chunk_content": c.chunk_content[:200] if c.chunk_content else "",
+                                    }
+                                    for c in created_citations
+                                ]
+                                logger.info(
+                                    "citations_from_dify_api",
+                                    count=len(citations_response),
+                                    document_id=str(document_id),
+                                )
+                    except Exception as e:
+                        logger.error(
+                            "dify_get_message_failed",
+                            error=str(e),
+                            message_id=dify_message_id,
+                        )
+
         except Exception as e:
             logger.error("stream_error", error=str(e), conversation_id=str(conversation_id))
             yield f"event: error\ndata: {{\"message\": {json.dumps(f'流式生成异常: {str(e)}', ensure_ascii=False)}}}\n\n"
@@ -466,6 +528,7 @@ async def stream_message(
             "ai_message_id": str(ai_message_id) if ai_message_id else None,
             "document_id": str(_doc_id) if _doc_id else None,
             "docx_url": docx_url,
+            "citations": citations_response,
         }
         yield f"event: done\ndata: {json.dumps(done_data, ensure_ascii=False)}\n\n"
 

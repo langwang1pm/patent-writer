@@ -222,6 +222,7 @@ export default function ChatView() {
                       <FileAttachment
                         fileName={`文档-${message.id.slice(0, 8)}.docx`}
                         fileUrl={message.docx_url}
+                        documentId={message.document_id}
                       />
                     )}
                   </div>

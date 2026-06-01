@@ -1,7 +1,7 @@
 import { BookOpen, ChevronRight, ExternalLink, MapPin, Quote } from 'lucide-react'
 import { useCitationStore } from '@/stores/citationStore'
 import { cn } from '@/utils/cn'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 
 interface CitationPanelProps {
   /** 面板是否可见 */
@@ -33,6 +33,24 @@ export default function CitationPanel({
       }
     }
   }, [activeCitationId])
+
+  /** 定位到原文：新页签打开知识库文件预览（OnlyOffice） */
+  const handleLocateSource = useCallback((citation: typeof citations[number]) => {
+    const sourceId = citation.source_id
+    if (!sourceId) return
+
+    // fileKey 格式: kb:{dify_document_id}
+    const fileKey = `kb:${sourceId}`
+    const fileName = citation.source_name || '文档'
+
+    const params = new URLSearchParams({
+      fileKey,
+      fileName,
+      mode: 'view',
+    })
+
+    window.open(`/preview?${params.toString()}`, '_blank')
+  }, [])
 
   return (
     <aside ref={panelRef} className="w-80 bg-white border-l border-gray-200 flex flex-col shrink-0 overflow-hidden">
@@ -119,12 +137,32 @@ export default function CitationPanel({
 
                   {/* 操作按钮行 */}
                   <div className="flex items-center gap-3 mt-2.5 pl-7">
-                    <button className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleLocateSource(citation)
+                      }}
+                      disabled={!citation.source_id}
+                      className={cn(
+                        'flex items-center gap-1 text-xs font-medium',
+                        citation.source_id
+                          ? 'text-primary-600 hover:text-primary-700 cursor-pointer'
+                          : 'text-gray-300 cursor-not-allowed'
+                      )}
+                      title={citation.source_id ? '新页签打开文件预览' : '无法定位：缺少来源 ID'}
+                    >
                       <MapPin className="w-3 h-3" />
                       定位到原文
                     </button>
                     {citation.source_id && (
-                      <button className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleLocateSource(citation)
+                        }}
+                        className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+                        title="新页签打开文件预览"
+                      >
                         <ExternalLink className="w-3 h-3" />
                         查看原文
                       </button>
