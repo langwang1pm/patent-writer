@@ -16,17 +16,12 @@ export interface KnowledgeConfig {
   updated_at?: string;
 }
 
-export interface KnowledgeConfigListResponse {
-  configs: KnowledgeConfig[];
-  total: number;
-}
-
 /**
  * 获取所有知识库配置
  */
 export async function listKnowledgeConfigs(): Promise<KnowledgeConfig[]> {
-  const response = await api.get<KnowledgeConfigListResponse>('/api/knowledge/configs');
-  return response.data.configs;
+  const data = await api.get<{ configs: KnowledgeConfig[] }>('/knowledge/configs').json();
+  return data.configs;
 }
 
 /**
@@ -35,8 +30,8 @@ export async function listKnowledgeConfigs(): Promise<KnowledgeConfig[]> {
 export async function createKnowledgeConfig(
   config: Omit<KnowledgeConfig, 'id' | 'created_at' | 'updated_at'>
 ): Promise<KnowledgeConfig> {
-  const response = await api.post<KnowledgeConfig>('/api/knowledge/configs', config);
-  return response.data;
+  const data = await api.post<KnowledgeConfig>('/knowledge/configs', { json: config }).json();
+  return data;
 }
 
 /**
@@ -46,21 +41,21 @@ export async function updateKnowledgeConfig(
   id: number,
   config: Partial<KnowledgeConfig>
 ): Promise<KnowledgeConfig> {
-  const response = await api.put<KnowledgeConfig>(`/api/knowledge/configs/${id}`, config);
-  return response.data;
+  const data = await api.put<KnowledgeConfig>(`/knowledge/configs/${id}`, { json: config }).json();
+  return data;
 }
 
 /**
  * 删除知识库配置
  */
 export async function deleteKnowledgeConfig(id: number): Promise<void> {
-  await api.delete(`/api/knowledge/configs/${id}`);
+  await api.delete(`/knowledge/configs/${id}`);
 }
 
 /**
  * 测试知识库配置连接
  */
 export async function testKnowledgeConfigConnection(id: number): Promise<{ success: boolean; message: string }> {
-  const response = await api.post<{ success: boolean; message: string }>(`/api/knowledge/configs/${id}/test`);
-  return response.data;
+  const data = await api.post<{ success: boolean; message: string }>(`/knowledge/configs/${id}/test`).json();
+  return data;
 }
