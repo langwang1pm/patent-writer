@@ -34,8 +34,10 @@ def _console_url(config: KnowledgeConfig, path: str) -> str:
 async def list_knowledge_files(
     db: Annotated[AsyncSession, Depends(get_db)],
     knowledge_config_id: uuid.UUID | None = None,
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
+    page_size: int = Query(10, ge=1, le=100, description="每页数量，最大 100"),
 ):
-    """获取知识库文件列表"""
+    """获取知识库文件列表（支持分页）"""
     config = await _get_knowledge_config(db, knowledge_config_id)
 
     try:
@@ -43,31 +45,53 @@ async def list_knowledge_files(
             url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/documents"
             headers = {"Authorization": f"Bearer {config.dify_api_key}"}
 
-            async with session.get(url, headers=headers) as response:
-                if response.status != 200:
-                    raise HTTPException(
-                        status_code=response.status,
-                        detail=f"获取文件列表失败: {await response.text()}"
-                    )
-
-                data = await response.json()
+            # Dify API 默认 limit=20，需要循环获取全部数据
+            all_items: list = []
+            dify_page = 1
+            dify_limit = 100  # 每次 Dify API 请求最多获取 100 条
+            while True:
+                params = {"page": dify_page, "limit": dify_limit}
+                async with session.get(url, headers=headers, params=params) as response:
+                    if response.status != 200:
+                        raise HTTPException(
+                            status_code=response.status,
+                            detail=f"获取文件列表失败: {await response.text()}"
+                        )
+                    data = await response.json()
                 items = data.get("data", [])
+                all_items.extend(items)
+                # has_more=False 或返回数据为空时停止
+                if not data.get("has_more", False) or len(items) == 0:
+                    break
+                dify_page += 1
 
-                # 补充 size（从数据库查）
-                result = await db.execute(
-                    select(KnowledgeFile).where(
-                        KnowledgeFile.knowledge_config_id == config.id
-                    )
+            # 补充 size（从数据库查）
+            result = await db.execute(
+                select(KnowledgeFile).where(
+                    KnowledgeFile.knowledge_config_id == config.id
                 )
-                file_records = {fr.dify_document_id: fr for fr in result.scalars().all()}
-                for item in items:
-                    doc_id = item.get("id")
-                    if doc_id and doc_id in file_records:
-                        item["size"] = file_records[doc_id].size
-                    else:
-                        item["size"] = None
+            )
+            file_records = {fr.dify_document_id: fr for fr in result.scalars().all()}
+            for item in all_items:
+                doc_id = item.get("id")
+                if doc_id and doc_id in file_records:
+                    item["size"] = file_records[doc_id].size
+                else:
+                    item["size"] = None
 
-                return {"items": items, "total": len(items)}
+            total = len(all_items)
+            # 计算分页
+            start = (page - 1) * page_size
+            end = start + page_size
+            items = all_items[start:end]
+
+            return {
+                "items": items,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+            }
 
     except aiohttp.ClientError as e:
         raise HTTPException(status_code=500, detail=f"连接 Dify 失败: {str(e)}")
@@ -278,31 +302,60 @@ async def search_knowledge_files(
     q: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     knowledge_config_id: uuid.UUID | None = None,
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
+    page_size: int = Query(10, ge=1, le=100, description="每页数量，最大 100"),
 ):
-    """搜索知识库文件"""
+    """
+    搜索知识库文件（支持分页）。
+    
+    注意：搜索范围是知识库中的全部内容，先从 Dify 获取所有文件，
+    然后按文件名关键词过滤，最后再分页返回结果。
+    """
     config = await _get_knowledge_config(db, knowledge_config_id)
 
     try:
         async with aiohttp.ClientSession() as session:
             url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/documents"
             headers = {"Authorization": f"Bearer {config.dify_api_key}"}
-            params = {"keyword": q}
 
-            async with session.get(url, headers=headers, params=params) as response:
-                if response.status != 200:
-                    raise HTTPException(
-                        status_code=response.status,
-                        detail=f"搜索文件失败: {await response.text()}",
-                    )
-
-                data = await response.json()
+            # Dify API 默认 limit=20，需要循环获取全部数据
+            all_items: list = []
+            dify_page = 1
+            dify_limit = 100
+            while True:
+                params = {"keyword": q, "page": dify_page, "limit": dify_limit}
+                async with session.get(url, headers=headers, params=params) as response:
+                    if response.status != 200:
+                        raise HTTPException(
+                            status_code=response.status,
+                            detail=f"搜索文件失败: {await response.text()}",
+                        )
+                    data = await response.json()
                 items = data.get("data", [])
-                filtered_items = [
-                    item for item in items
-                    if q.lower() in item.get("name", "").lower()
-                ]
+                all_items.extend(items)
+                if not data.get("has_more", False) or len(items) == 0:
+                    break
+                dify_page += 1
+            
+            # 在全部内容中按文件名过滤（不区分大小写）
+            filtered_items = [
+                item for item in all_items
+                if q.lower() in item.get("name", "").lower()
+            ]
 
-                return {"items": filtered_items, "total": len(filtered_items)}
+            total = len(filtered_items)
+            # 对搜索结果进行分页
+            start = (page - 1) * page_size
+            end = start + page_size
+            items = filtered_items[start:end]
+
+            return {
+                "items": items,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+            }
 
     except aiohttp.ClientError as e:
         raise HTTPException(status_code=500, detail=f"连接 Dify 失败: {str(e)}")

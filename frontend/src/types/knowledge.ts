@@ -18,17 +18,35 @@ export interface KnowledgeFile {
   data_source_type?: string
 }
 
+// 分页响应类型
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
 export interface KnowledgeState {
   files: KnowledgeFile[]
   isLoading: boolean
   isUploading: boolean
   error: string | null
+  // 分页状态
+  pagination: {
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+  }
 
-  fetchFiles: () => Promise<void>
+  fetchFiles: (page?: number, pageSize?: number) => Promise<void>
   uploadFile: (file: File) => Promise<void>
   deleteFile: (fileId: string) => Promise<void>
-  searchFiles: (query: string) => Promise<void>
+  searchFiles: (query: string, page?: number, pageSize?: number) => Promise<void>
   clearError: () => void
+  setPage: (page: number) => void
+  setPageSize: (pageSize: number) => void
 }
 
 export interface KnowledgeConfig {

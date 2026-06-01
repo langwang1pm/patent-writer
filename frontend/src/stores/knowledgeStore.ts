@@ -3,18 +3,38 @@ import { devtools } from 'zustand/middleware'
 import { KnowledgeFile, KnowledgeState } from '@/types/knowledge'
 import { knowledgeApi } from '@/services/knowledgeApi'
 
+// 默认分页配置
+const DEFAULT_PAGE_SIZE = 10
+const DEFAULT_PAGE = 1
+
 export const useKnowledgeStore = create<KnowledgeState>()(
   devtools((set, get) => ({
     files: [],
     isLoading: false,
     isUploading: false,
     error: null,
+    // 分页状态
+    pagination: {
+      page: DEFAULT_PAGE,
+      pageSize: DEFAULT_PAGE_SIZE,
+      total: 0,
+      totalPages: 0,
+    },
 
-    fetchFiles: async () => {
+    fetchFiles: async (page: number = DEFAULT_PAGE, pageSize: number = DEFAULT_PAGE_SIZE) => {
       set({ isLoading: true, error: null })
       try {
-        const data = await knowledgeApi.listFiles()
-        set({ files: data.items || [], isLoading: false })
+        const data = await knowledgeApi.listFiles(page, pageSize)
+        set({
+          files: data.items || [],
+          isLoading: false,
+          pagination: {
+            page: data.page || page,
+            pageSize: data.page_size || pageSize,
+            total: data.total || 0,
+            totalPages: data.total_pages || 0,
+          },
+        })
       } catch (error) {
         console.error('获取文件列表失败:', error)
         set({
@@ -43,10 +63,27 @@ export const useKnowledgeStore = create<KnowledgeState>()(
       set({ error: null })
       try {
         await knowledgeApi.deleteFile(fileId)
-        // 从列表中移除
-        set((state) => ({
-          files: state.files.filter((f) => f.id !== fileId),
-        }))
+        // 从列表中移除，并更新总数
+        const state = get()
+        const newFiles = state.files.filter((f) => f.id !== fileId)
+        const newTotal = Math.max(0, state.pagination.total - 1)
+        const newTotalPages = newTotal > 0
+          ? Math.ceil(newTotal / state.pagination.pageSize)
+          : 0
+        // 如果当前页没有数据了且不是第一页，则回到上一页
+        let newPage = state.pagination.page
+        if (newFiles.length === 0 && newPage > 1) {
+          newPage -= 1
+        }
+        set({
+          files: newFiles,
+          pagination: {
+            ...state.pagination,
+            total: newTotal,
+            totalPages: newTotalPages,
+            page: newPage,
+          },
+        })
       } catch (error) {
         console.error('删除文件失败:', error)
         set({
@@ -56,11 +93,20 @@ export const useKnowledgeStore = create<KnowledgeState>()(
       }
     },
 
-    searchFiles: async (query: string) => {
+    searchFiles: async (query: string, page: number = DEFAULT_PAGE, pageSize: number = DEFAULT_PAGE_SIZE) => {
       set({ isLoading: true, error: null })
       try {
-        const data = await knowledgeApi.searchFiles(query)
-        set({ files: data.items || [], isLoading: false })
+        const data = await knowledgeApi.searchFiles(query, page, pageSize)
+        set({
+          files: data.items || [],
+          isLoading: false,
+          pagination: {
+            page: data.page || page,
+            pageSize: data.page_size || pageSize,
+            total: data.total || 0,
+            totalPages: data.total_pages || 0,
+          },
+        })
       } catch (error) {
         console.error('搜索文件失败:', error)
         set({
@@ -72,6 +118,22 @@ export const useKnowledgeStore = create<KnowledgeState>()(
 
     clearError: () => {
       set({ error: null })
+    },
+
+    setPage: (page: number) => {
+      set((state) => ({
+        pagination: { ...state.pagination, page },
+      }))
+    },
+
+    setPageSize: (pageSize: number) => {
+      set((state) => ({
+        pagination: {
+          ...state.pagination,
+          pageSize,
+          page: DEFAULT_PAGE, // 切换每页数量时重置到第一页
+        },
+      }))
     },
   }))
 )

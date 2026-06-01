@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SSE 流式测试</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        #output { background: #252526; padding: 10px; height: 500px; overflow-y: auto; white-space: pre-wrap; }
+        .event { color: #569cd6; }
+        .data { color: #6a9955; }
+        .error { color: #f48771; }
+        .content { color: #d4d4d4; }
+        input { width: 300px; padding: 5px; }
+        button { padding: 5px 10px; margin-left: 10px; }
+    </style>
+</head>
+<body>
+    <h2>SSE 流式输出测试</h2>
+    
+    <div>
+        <label>Conversation ID: </label>
+        <input type="text" id="convId" placeholder="输入对话 ID" value="d18c4312-c942-4a61-9b7d-ce3342fe7cdd"><br><br>
+        <label>消息内容: </label>
+        <input type="text" id="content" placeholder="输入测试消息" value="简单介绍一下专利"><br><br>
+        <button onclick="startSSE()">开始 SSE 流式测试</button>
+        <button onclick="clearOutput()">清空输出</button>
+    </div>
+    
+    <hr>
+    <div id="output"></div>
+    
+    <script>
+        let eventSource = null;
+        let output = document.getElementById('output');
+        let fullContent = '';
+        
+        function log(text, className = '') {
+            const div = document.createElement('div');
+            div.className = className;
+            div.textContent = text;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function clearOutput() {
+            output.innerHTML = '';
+            fullContent = '';
+        }
+        
+        function startSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            const convId = document.getElementById('convId').value.trim();
+            const content = document.getElementById('content').value.trim();
+            
+            if (!convId || !content) {
+                alert('请输入 Conversation ID 和消息内容');
+                return;
+            }
+            
+            clearOutput();
+            log('🔌 连接 SSE 流...', 'event');
+            log(`   URL: /api/v1/conversations/${convId}/stream?content=${encodeURIComponent(content)}`, 'data');
+            log('', '');
+            
+            const url = `/api/v1/conversations/${convId}/stream?content=${encodeURIComponent(content)}`;
+            eventSource = new EventSource(url);
+            
+            let eventCount = 0;
+            let deltaCount = 0;
+            
+            eventSource.addEventListener('message_start', (event) => {
+                eventCount++;
+                log(`📌 [${eventCount}] message_start`, 'event');
+                log(`   ${event.data}`, 'data');
+                log('', '');
+            });
+            
+            eventSource.addEventListener('content_delta', (event) => {
+                eventCount++;
+                deltaCount++;
+                try {
+                    const data = JSON.parse(event.data);
+                    const delta = data.delta || '';
+                    fullContent += delta;
+                    
+                    // 每 10 个 delta 显示一次
+                    if (deltaCount % 10 === 0) {
+                        log(`   ... 已接收 ${deltaCount} 个片段，总长度: ${fullContent.length}`, 'data');
+                    }
+                    
+                    // 实时显示最新内容（前 50 字符）
+                    if (deltaCount <= 5) {
+                        log(`📝 [${eventCount}] content_delta: "${delta}"`, 'content');
+                    }
+                } catch (e) {
+                    log(`❌ 解析失败: ${event.data}`, 'error');
+                }
+            });
+            
+            eventSource.addEventListener('message_end', (event) => {
+                eventCount++;
+                log(`📌 [${eventCount}] message_end`, 'event');
+                log(`   ${event.data}`, 'data');
+                log('', '');
+            });
+            
+            eventSource.addEventListener('done', (event) => {
+                eventCount++;
+                log(`✅ [${eventCount}] done`, 'event');
+                log(`   ${event.data}`, 'data');
+                log('', '');
+                log(`📊 统计:`, 'event');
+                log(`   总事件数: ${eventCount}`, 'data');
+                log(`   内容片段数: ${deltaCount}`, 'data');
+                log(`   完整内容长度: ${fullContent.length} 字符`, 'data');
+                log(`   完整内容:`, 'data');
+                log(`${fullContent}`, 'content');
+                eventSource.close();
+            });
+            
+            eventSource.addEventListener('error', (event) => {
+                eventCount++;
+                log(`❌ [${eventCount}] error`, 'error');
+                log(`   ${event.data}`, 'error');
+                log('', '');
+            });
+            
+            eventSource.onerror = (error) => {
+                log(`❌ EventSource 错误: ${error}`, 'error');
+                log('   连接已关闭', 'error');
+                eventSource.close();
+            };
+        }
+    </script>
+</body>
+</html>

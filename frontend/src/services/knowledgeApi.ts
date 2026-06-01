@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { KnowledgeConfig, KnowledgeConfigListResponse, KnowledgeConfigTestResponse } from '@/types/knowledge'
+import type { KnowledgeConfig, KnowledgeConfigListResponse, KnowledgeConfigTestResponse, PaginatedResponse } from '@/types/knowledge'
 
 const API_BASE = '/api/v1'
 
@@ -48,11 +48,17 @@ export const knowledgeApi = {
   // ---- 知识库文件 -----------------------------------------------------------
 
   /**
-   * 获取文件列表
+   * 获取文件列表（支持分页）
+   * @param page 页码，从 1 开始
+   * @param pageSize 每页数量
    * @param knowledgeConfigId 可选，不传则使用默认配置
    */
-  listFiles: async (knowledgeConfigId?: string): Promise<{ items: any[]; total: number }> => {
-    const cfg: Record<string, string> = {}
+  listFiles: async (
+    page: number = 1,
+    pageSize: number = 10,
+    knowledgeConfigId?: string
+  ): Promise<PaginatedResponse<any>> => {
+    const cfg: Record<string, any> = { page, page_size: pageSize }
     if (knowledgeConfigId) cfg.knowledge_config_id = knowledgeConfigId
     return api.get('knowledge/files', { searchParams: cfg }).json()
   },
@@ -95,10 +101,20 @@ export const knowledgeApi = {
   },
 
   /**
-   * 搜索知识库文件（按文件名关键词）
+   * 搜索知识库文件（按文件名关键词，支持分页）
+   * 搜索范围是知识库中的全部内容
+   * @param query 搜索关键词
+   * @param page 页码，从 1 开始
+   * @param pageSize 每页数量
+   * @param knowledgeConfigId 可选，不传则使用默认配置
    */
-  searchFiles: async (query: string, knowledgeConfigId?: string): Promise<{ items: any[]; total: number }> => {
-    const cfg: Record<string, string> = { q: query }
+  searchFiles: async (
+    query: string,
+    page: number = 1,
+    pageSize: number = 10,
+    knowledgeConfigId?: string
+  ): Promise<PaginatedResponse<any>> => {
+    const cfg: Record<string, any> = { q: query, page, page_size: pageSize }
     if (knowledgeConfigId) cfg.knowledge_config_id = knowledgeConfigId
     return api.get('knowledge/files/search', { searchParams: cfg }).json()
   },

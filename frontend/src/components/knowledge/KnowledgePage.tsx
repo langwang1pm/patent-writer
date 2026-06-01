@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Upload, Search, FileText, Trash2, Loader2,
   CheckCircle, Clock, AlertCircle, PauseCircle,
@@ -8,6 +8,7 @@ import { useKnowledgeStore } from '@/stores/knowledgeStore'
 import { knowledgeApi } from '@/services/knowledgeApi'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import Pagination from '@/components/ui/Pagination'
 import type { KnowledgeConfigListResponse } from '@/types/knowledge'
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = {
@@ -53,8 +54,9 @@ function openFilePreview(file: any) {
 
 export default function KnowledgePage() {
   const {
-    files, isLoading, isUploading, error,
+    files, isLoading, isUploading, error, pagination,
     fetchFiles, uploadFile, deleteFile, searchFiles, clearError,
+    setPageSize,
   } = useKnowledgeStore()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -68,13 +70,54 @@ export default function KnowledgePage() {
 
   const defaultConfigId = configs?.default_id ?? configs?.items?.[0]?.id ?? undefined
 
-  useEffect(() => { fetchFiles() }, [fetchFiles])
+  // 初始加载（带分页参数）
+  useEffect(() => {
+    fetchFiles(pagination.page, pagination.pageSize)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  
   useEffect(() => { if (error) clearError() }, [error, clearError])
 
+  /**
+   * 处理搜索
+   * 搜索范围是知识库中的全部内容，搜索结果支持分页
+   */
   const handleSearch = useCallback((q: string) => {
     setSearchQuery(q)
-    q.trim() ? searchFiles(q) : fetchFiles()
-  }, [searchFiles, fetchFiles])
+    if (q.trim()) {
+      // 有搜索词时，从第一页开始搜索
+      searchFiles(q, 1, pagination.pageSize)
+    } else {
+      // 清空搜索时，回到当前分页状态
+      fetchFiles(pagination.page, pagination.pageSize)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchFiles, fetchFiles, pagination.pageSize])
+
+  /**
+   * 切换页码
+   */
+  const handlePageChange = useCallback((page: number) => {
+    if (searchQuery.trim()) {
+      // 搜索状态下切换页码
+      searchFiles(searchQuery, page, pagination.pageSize)
+    } else {
+      // 普通列表切换页码
+      fetchFiles(page, pagination.pageSize)
+    }
+  }, [searchQuery, searchFiles, fetchFiles, pagination.pageSize])
+
+  /**
+   * 切换每页数量
+   */
+  const handlePageSizeChange = useCallback((newPageSize: number) => {
+    setPageSize(newPageSize)
+    if (searchQuery.trim()) {
+      searchFiles(searchQuery, 1, newPageSize)
+    } else {
+      fetchFiles(1, newPageSize)
+    }
+  }, [searchQuery, searchFiles, fetchFiles, setPageSize])
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files
@@ -82,14 +125,27 @@ export default function KnowledgePage() {
     try {
       for (const f of Array.from(list)) await uploadFile(f)
       setShowUploadModal(false)
-      await fetchFiles()
+      // 上传完成后刷新当前页
+      if (searchQuery.trim()) {
+        searchFiles(searchQuery, pagination.page, pagination.pageSize)
+      } else {
+        fetchFiles(pagination.page, pagination.pageSize)
+      }
     } catch { /* store 已处理 error */ }
     e.target.value = ''
   }
 
   const handleDelete = async (fileId: string, name: string) => {
     if (!confirm(`确定删除「${name}」吗？`)) return
-    try { await deleteFile(fileId) } catch {}
+    try { 
+      await deleteFile(fileId)
+      // 删除后自动刷新当前页（store 内部会处理页码调整）
+      if (searchQuery.trim()) {
+        searchFiles(searchQuery, pagination.page, pagination.pageSize)
+      } else {
+        fetchFiles(pagination.page, pagination.pageSize)
+      }
+    } catch {}
   }
 
   const fmtDate = (ts: any) => {
@@ -230,6 +286,18 @@ export default function KnowledgePage() {
           </div>
         )}
       </div>
+
+      {/* 分页组件 */}
+      {!isLoading && files.length > 0 && (
+        <Pagination
+          currentPage={pagination.page}
+          totalPages={pagination.totalPages}
+          total={pagination.total}
+          pageSize={pagination.pageSize}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+        />
+      )}
 
       {/* 上传模态框 */}
       {showUploadModal && (
