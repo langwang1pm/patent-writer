@@ -3,13 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
-import { ChevronLeft, Edit2, Eye, Download, Save } from 'lucide-react'
+import { ChevronLeft, Edit2, Save } from 'lucide-react'
 import { documentApi } from '@/services/documentApi'
 import { citationApi } from '@/services/citationApi'
 import { useCitationStore } from '@/stores/citationStore'
 import { cn } from '@/utils/cn'
 import type { ChatDocument } from '@/types/conversation'
 import type { Citation } from '@/types/citation'
+import { marked } from 'marked'
 
 export default function DocumentView() {
   const { documentId } = useParams()
@@ -46,7 +47,12 @@ export default function DocumentView() {
         setCitations(doc.citations || [])
 
         if (editor && doc.content_html) {
+          // 优先使用 content_html（HTML 格式）
           editor.commands.setContent(doc.content_html)
+        } else if (editor && doc.content_markdown) {
+          // 兼容：如果 content_html 不存在，用 content_markdown 转换
+          const htmlContent = await marked.parse(doc.content_markdown)
+          editor.commands.setContent(htmlContent)
         }
       } catch (error) {
         console.error('加载文档失败:', error)
@@ -78,24 +84,6 @@ export default function DocumentView() {
       console.error('保存失败:', error)
     } finally {
       setIsSaving(false)
-    }
-  }
-
-  const handleExport = async () => {
-    if (!document) return
-
-    try {
-      const blob = await documentApi.export(document.id)
-      const url = URL.createObjectURL(blob)
-      const a = globalThis.document.createElement('a')
-      a.href = url
-      a.download = `${document.title}.docx`
-      globalThis.document.body.appendChild(a)
-      a.click()
-      globalThis.document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('导出失败:', error)
     }
   }
 
@@ -150,13 +138,6 @@ export default function DocumentView() {
                 <Save className="w-4 h-4" />
                 {isSaving ? '保存中...' : '保存'}
               </button>
-              <button
-                onClick={() => setIsEditing(false)}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg"
-              >
-                <Eye className="w-4 h-4" />
-                预览
-              </button>
             </>
           ) : (
             <>
@@ -166,13 +147,6 @@ export default function DocumentView() {
               >
                 <Edit2 className="w-4 h-4" />
                 编辑
-              </button>
-              <button
-                onClick={handleExport}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-              >
-                <Download className="w-4 h-4" />
-                导出
               </button>
             </>
           )}
