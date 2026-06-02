@@ -126,7 +126,7 @@ async def upload_knowledge_file(
             form_data.add_field(
                 "file", file_content,
                 filename=raw_filename,
-                content_type=file.content_type or "application/octet-stream",
+                # content_type=file.content_type or "application/octet-stream",
             )
 
             # 根据配置的索引模式决定上传参数
