@@ -13,7 +13,31 @@ RUN npm install
 # Receive build arg from docker-compose.yml   build-arg   
 ARG VITE_API_BASE_URL  
 
-RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
+RUN echo "Starting build..." && \
+    npm run build 2>&1 || { \
+        echo "========================================"; \
+        echo "BUILD FAILED. Checking for common issues..."; \
+        echo "========================================"; \
+        echo "Checking if src directory exists:"; \
+        ls -la src/ 2>&1 || echo "src directory not found!"; \
+        echo "========================================"; \
+        echo "Checking for TypeScript errors:"; \
+        npx tsc --noEmit 2>&1 || echo "TypeScript check failed"; \
+        echo "========================================"; \
+        echo "Checking vite.config.ts:"; \
+        cat vite.config.* 2>&1 || echo "vite.config not found"; \
+        echo "========================================"; \
+        echo "Checking index.html:"; \
+        cat index.html 2>&1 || echo "index.html not found"; \
+        echo "========================================"; \
+        exit 1; \
+    }
+
+# 如果构建成功，检查产物
+RUN echo "Build successful! Checking dist directory:" && \
+    ls -la dist/ && \
+    echo "Dist contents:" && \
+    find dist -type f | head -20
 
 # ========== PHASE2 — RUN WITH NGINX ==========
 FROM nginx:alpine AS runner  
