@@ -1,28 +1,26 @@
 # 构建阶段
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
 # 先复制依赖文件，安装依赖
-COPY package.json ./
-RUN npm ci
+COPY package.json package-lock.json* ./
+RUN npm install
 
 # 再复制源代码，构建
 COPY . .
 RUN npm run build
 
 # 运行阶段 — 最小镜像
-FROM node:20-alpine
+FROM node:24-alpine AS runner
 
 WORKDIR /app
 
+# 安装 serve
+RUN npm install -g serve
+
 # 只复制构建产物
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY package.json .
-
-# 使用 serve 或 nginx 来托管静态文件
-RUN npm install -g serve
 
 EXPOSE 3000
 
