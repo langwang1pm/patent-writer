@@ -79,8 +79,7 @@ services:
       - patent-writer-net
 
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
 
 
 
