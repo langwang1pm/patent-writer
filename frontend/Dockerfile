@@ -13,8 +13,7 @@ RUN npm install
 # Receive build arg from docker-compose.yml   build-arg   
 ARG VITE_API_BASE_URL  
 
-# Replace placeholder API URL in source code, then build production bundle     replace placeholder with actual backend URL     find all TypeScript files and replace the placeholder    
-RUN npm run build
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
 # ========== PHASE2 — RUN WITH NGINX ==========
 FROM nginx:alpine AS runner  
