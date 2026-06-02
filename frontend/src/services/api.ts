@@ -1,6 +1,6 @@
 import ky from 'ky'
 
-const API_BASE = '__VITE_API_BASE_URL__' + '/api/v1'
+const API_BASE = import.meta.env.VITE_API_BASE_URL + '/api/v1'
 
 export const api = ky.create({
   prefixUrl: API_BASE,

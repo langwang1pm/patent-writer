@@ -14,9 +14,7 @@ RUN npm install
 ARG VITE_API_BASE_URL  
 
 # Replace placeholder API URL in source code, then build production bundle     replace placeholder with actual backend URL     find all TypeScript files and replace the placeholder    
-RUN apk add --no-cache sed && \
-    find ./src -name "*.ts" -exec sed -i "s|__VITE_API_BASE_URL__|${VITE_API_BASE_URL}|g" {} + && \
-    npm run build  
+RUN npm run build
 
 # ========== PHASE2 — RUN WITH NGINX ==========
 FROM nginx:alpine AS runner  
