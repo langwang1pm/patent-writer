@@ -108,6 +108,7 @@ async def upload_knowledge_file(
     file: UploadFile = File(...),
     knowledge_config_id: uuid.UUID | None = None,
 ):
+    logger.info(f"程序走到该方法")
     """上传文件到 Dify 知识库，并保存到本地"""
     config = await _get_knowledge_config(db, knowledge_config_id)
     raw_filename = file.filename or "upload"
