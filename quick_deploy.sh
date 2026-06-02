@@ -124,7 +124,7 @@ for i in $(seq 1 12); do
 
     # 检查后端健康
     if [ "$BACKEND_OK" = false ]; then
-        if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+        if curl -sf http://localhost:8002/health > /dev/null 2>&1; then
             BACKEND_OK=true
             log_info "后端服务已就绪 ✓"
         fi
@@ -165,8 +165,8 @@ fi
 echo ""
 echo "访问地址:"
 echo "  前端: http://localhost:3000"
-echo "  后端API: http://localhost:8000"
-echo "  API文档: http://localhost:8000/docs"
+echo "  后端API: http://localhost:8002"
+echo "  API文档: http://localhost:8002/docs"
 echo ""
 echo "常用命令:"
 echo "  查看日志: $COMPOSE_CMD logs -f"
