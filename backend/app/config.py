@@ -1,6 +1,7 @@
 """应用配置管理"""
 from functools import lru_cache
 from urllib.parse import quote_plus, unquote_plus
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
