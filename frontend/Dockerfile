@@ -24,4 +24,5 @@ FROM nginx:alpine AS runner
 # Copy custom nginx configuration    
 COPY --from=builder /app/nginx.conf /etc/nginx/conf.d/default.conf   COPY --from=builder /app/dist /usr/share/nginx/html  
 
-EXPOSE    CMD ["nginx", "-g", "daemon off;"]  
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
