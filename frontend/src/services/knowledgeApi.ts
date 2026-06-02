@@ -78,8 +78,12 @@ export const knowledgeApi = {
 
     const response = await fetch(url, { method: 'POST', body: formData })
     if (!response.ok) {
-      const err = await response.json().catch(() => ({ detail: '上传失败' }))
-      throw new Error(err.detail || '上传失败')
+      const err = await response.json().catch(() => null)
+      // Dify 错误格式: { code, message, status }
+      // FastAPI 错误格式: { detail }
+      const msg =
+        err?.message || err?.detail || `上传失败 (HTTP ${response.status})`
+      throw new Error(msg)
     }
     return response.json()
   },
