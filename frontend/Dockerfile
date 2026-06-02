@@ -13,6 +13,7 @@ RUN npm install
 # Receive build arg from docker-compose.yml   build-arg   
 ARG VITE_API_BASE_URL  
 
+COPY . .
 RUN echo "Starting build..." && \
     npm run build 2>&1 || { \
         echo "========================================"; \
