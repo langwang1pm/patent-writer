@@ -2,7 +2,7 @@
 FROM node:22-alpine AS builder
 
 # Alpine 缺少 node-gyp 所需的编译工具
-RUN apk add --no-cache python3 make g++
+# RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
