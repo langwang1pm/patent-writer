@@ -36,6 +36,9 @@ services:
     volumes:
       - ./backend:/app
 
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     networks:
       - patent-writer-net
 
@@ -68,6 +71,9 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
     networks:
       - patent-writer-net
