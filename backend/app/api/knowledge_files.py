@@ -120,7 +120,8 @@ async def upload_knowledge_file(
     try:
         async with aiohttp.ClientSession() as session:
             url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/document/create_by_file"
-            form_data = aiohttp.FormData(quote_fields=False)
+            # form_data = aiohttp.FormData(quote_fields=False)
+            form_data = FormData()
             form_data.add_field(
                 "file", file_content,
                 filename=raw_filename,
@@ -131,10 +132,20 @@ async def upload_knowledge_file(
             # economy: 关键词匹配，无需 Embedding 模型
             # high_quality: 向量检索，需要 Embedding 模型已配置
             indexing_technique = getattr(config, 'indexing_technique', 'economy') or 'economy'
+            # form_data.add_field(
+            #     "data",
+            #     f'{{"indexing_technique":"{indexing_technique}","process_rule":{{"mode":"automatic"}}}}',
+            # )
+            import json
             form_data.add_field(
                 "data",
-                f'{{"indexing_technique":"{indexing_technique}","process_rule":{{"mode":"automatic"}}}}',
+                json.dumps({
+                    "indexing_technique": indexing_technique,
+                    "process_rule": {"mode": "automatic"}
+                }),
+                content_type="application/json"  # 明确指定内容类型
             )
+
             headers = {"Authorization": f"Bearer {config.dify_api_key}"}
 
             async with session.post(url, data=form_data, headers=headers) as response:
