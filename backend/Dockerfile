@@ -1,20 +1,21 @@
 # 构建阶段
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
-# 升级 pip 并安装依赖（干净环境）
+# 先复制依赖文件（利用 Docker 层缓存）
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     -i https://pypi.tuna.tsinghua.edu.cn/simple \
     --trusted-host pypi.tuna.tsinghua.edu.cn
 
 # 运行时阶段 — 最小镜像
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
 # 只复制已安装的包
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # 复制代码
