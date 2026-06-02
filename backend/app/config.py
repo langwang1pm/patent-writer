@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     database_url: str = ""
     database_schema: str = "patentwriter"
 
+    # 分散式数据库配置（DATABASE_URL 未设置时自动拼装）
+    database_host: str = "localhost"
+    database_port: int = 5432
+    database_name: str = "patentwriter"
+    database_user: str = ""
+    database_password: str = ""
+
     # Redis 配置
     redis_url: str | None = None
 
@@ -47,6 +54,18 @@ class Settings(BaseSettings):
     app_port: int = 8000
     app_host: str = "0.0.0.0"
     debug: bool = False
+
+    @model_validator(mode="after")
+    def _build_database_url_if_missing(self) -> "Settings":
+        """DATABASE_URL 为空时，用分散变量拼装连接串"""
+        if not self.database_url:
+            from urllib.parse import quote_plus
+            pw = quote_plus(self.database_password) if self.database_password else ""
+            if self.database_user:
+                self.database_url = f"postgresql://{self.database_user}:{pw}@{self.database_host}:{self.database_port}/{self.database_name}"
+            else:
+                self.database_url = f"postgresql://{self.database_host}:{self.database_port}/{self.database_name}"
+        return self
 
     @property
     def decoded_database_url(self) -> str:
