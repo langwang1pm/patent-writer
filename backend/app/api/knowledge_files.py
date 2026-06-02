@@ -3,6 +3,8 @@ import uuid
 import aiohttp
 from aiohttp import FormData
 import os
+import json
+import logging
 from pathlib import Path
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
@@ -13,6 +15,8 @@ from sqlalchemy import select
 from app.dependencies import get_db
 from app.models.knowledge_config import KnowledgeConfig
 from app.models.knowledge_file import KnowledgeFile
+
+logger = logging.getLogger(__name__)
 
 # 本地文件存储目录
 UPLOAD_DIR = Path("uploads/knowledge_files")
@@ -109,51 +113,51 @@ async def upload_knowledge_file(
     raw_filename = file.filename or "upload"
     file_content = await file.read()
     file_size = len(file_content)
-    
+
     # 保存文件到本地
     file_ext = Path(raw_filename).suffix
     local_filename = f"{uuid.uuid4()}{file_ext}"
     local_path = UPLOAD_DIR / local_filename
-    
+
     with open(local_path, "wb") as f:
         f.write(file_content)
 
     try:
         async with aiohttp.ClientSession() as session:
             url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/document/create_by_file"
-            # form_data = aiohttp.FormData(quote_fields=False)
             form_data = FormData()
             form_data.add_field(
                 "file", file_content,
                 filename=raw_filename,
-                # content_type=file.content_type or "application/octet-stream",
+                content_type=file.content_type or "application/octet-stream",
             )
 
             # 根据配置的索引模式决定上传参数
             # economy: 关键词匹配，无需 Embedding 模型
             # high_quality: 向量检索，需要 Embedding 模型已配置
-            indexing_technique = getattr(config, 'indexing_technique', 'economy') or 'high_quality'
-            # form_data.add_field(
-            #     "data",
-            #     f'{{"indexing_technique":"{indexing_technique}","process_rule":{{"mode":"automatic"}}}}',
-            # )
-            import json
+            indexing_technique = getattr(config, 'indexing_technique', 'high_quality') or 'high_quality'
+            data_json = json.dumps({
+                "indexing_technique": indexing_technique,
+                "process_rule": {"mode": "automatic"}
+            })
+
+            logger.info(f"准备上传到 Dify: URL={url}, indexing_technique={indexing_technique}, data={data_json}")
+
             form_data.add_field(
                 "data",
-                json.dumps({
-                    "indexing_technique": indexing_technique,
-                    "process_rule": {"mode": "automatic"}
-                }),
-                content_type="application/json"  # 明确指定内容类型
+                data_json,
+                content_type="application/json"
             )
-
             headers = {"Authorization": f"Bearer {config.dify_api_key}"}
 
             async with session.post(url, data=form_data, headers=headers) as response:
+                response_text = await response.text()
+                logger.info(f"Dify 响应：status={response.status}, body={response_text}")
+
                 if response.status not in (200, 201):
                     raise HTTPException(
                         status_code=response.status,
-                        detail=f"上传到 Dify 失败: {await response.text()}",
+                        detail=f"上传到 Dify 失败：{response_text}",
                     )
                 dify_data = await response.json()
 
@@ -188,7 +192,7 @@ async def download_knowledge_file(
 ):
     """
     从本地文件系统提供文件下载。
-    
+
     优先使用本地保存的文件，如果没有则尝试从 Dify 下载（兼容旧数据）。
 
     - disposition=inline：让浏览器直接预览（PDF/图片会内联显示）
@@ -199,28 +203,28 @@ async def download_knowledge_file(
         select(KnowledgeFile).where(KnowledgeFile.dify_document_id == file_id)
     )
     knowledge_file = result.scalar_one_or_none()
-    
+
     if not knowledge_file:
         raise HTTPException(status_code=404, detail="文件不存在")
-    
+
     filename = knowledge_file.name
-    
+
     # 优先从本地文件系统提供文件
     if knowledge_file.local_path and os.path.exists(knowledge_file.local_path):
         local_path = Path(knowledge_file.local_path)
-        
+
         # 确定 media_type
         import mimetypes
         media_type, _ = mimetypes.guess_type(str(local_path))
         if not media_type:
             media_type = "application/octet-stream"
-        
+
         # RFC 5987 编码文件名（支持中文）
         from urllib.parse import quote
         encoded_filename = quote(filename, safe='')
-        
+
         content_disposition = f"{disposition}; filename*=UTF-8''{encoded_filename}"
-        
+
         return FileResponse(
             path=str(local_path),
             filename=filename,
@@ -229,11 +233,11 @@ async def download_knowledge_file(
                 "Content-Disposition": content_disposition,
             }
         )
-    
+
     # 兼容旧数据：如果没有本地文件，尝试从 Dify 下载
     else:
         config = await _get_knowledge_config(db, knowledge_config_id)
-        
+
         try:
             dify_url = _console_url(
                 config,
@@ -320,7 +324,7 @@ async def search_knowledge_files(
 ):
     """
     搜索知识库文件（支持分页）。
-    
+
     注意：搜索范围是知识库中的全部内容，先从 Dify 获取所有文件，
     然后按文件名关键词过滤，最后再分页返回结果。
     """
@@ -349,7 +353,7 @@ async def search_knowledge_files(
                 if not data.get("has_more", False) or len(items) == 0:
                     break
                 dify_page += 1
-            
+
             # 在全部内容中按文件名过滤（不区分大小写）
             filtered_items = [
                 item for item in all_items
