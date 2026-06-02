@@ -4,19 +4,20 @@ FROM node:22-alpine AS builder
 # npm 使用淘宝镜像
 RUN npm config set registry https://registry.npmmirror.com
 
-# 接收 Vite 环境变量（build 时注入）
-ARG VITE_API_BASE_URL
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-
 WORKDIR /app
 
 # 先复制依赖文件，安装依赖
 COPY package.json package-lock.json* ./
 RUN npm install
 
-# 再复制源代码，构建（此时 VITE_API_BASE_URL 已经注入）
+# 接收 VITE_API_BASE_URL（docker-compose build-arg 传入）
+ARG VITE_API_BASE_URL
+
+# 将占位符替换为实际 URL，然后构建
 COPY . .
-RUN npm run build
+RUN apk add --no-cache sed && \
+    find ./src -name "*.ts" -exec sed -i "s|__VITE_API_BASE_URL__|${VITE_API_BASE_URL}|g" {} + && \
+    npm run build
 
 # 运行阶段 — 最小镜像
 FROM node:22-alpine AS runner
