@@ -1,8 +1,11 @@
 """对话相关 Pydantic Schema"""
 from datetime import datetime
 from uuid import UUID
+from typing import Optional
 from pydantic import BaseModel, Field
 from app.schemas._datetime import CstDatetime
+from app.schemas.document import DocumentResponse, DocumentWithCitationsResponse
+from app.schemas.citation import CitationResponse
 
 
 class MessageBase(BaseModel):
@@ -91,8 +94,8 @@ class SendMessageResponse(BaseModel):
     message_id: UUID
     role: str = "assistant"
     content: str
-    document: "DocumentResponse | None" = None
-    citations: list["CitationResponse"] = []
+    document: Optional[DocumentResponse] = None
+    citations: list[CitationResponse] = []
 
 
 class ConversationListResponse(BaseModel):
@@ -101,8 +104,3 @@ class ConversationListResponse(BaseModel):
     total: int
     page: int
     page_size: int
-
-
-# 前向引用
-from app.schemas.document import DocumentResponse, DocumentWithCitationsResponse
-from app.schemas.citation import CitationResponse
