@@ -1,39 +1,129 @@
 services:
+  # ============================================
+  # 后端服务 — FastAPI
+  # ============================================
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+
+    container_name: patent-writer-backend
+    restart: unless-stopped
+
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
+
     environment:
-      - DATABASE_HOST=${DATABASE_HOST}
-      - DATABASE_PORT=${DATABASE_PORT}
-      - DATABASE_NAME=${DATABASE_NAME}
-      - DATABASE_USER=${DATABASE_USER}
-      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
-      - DIFY_BASE_URL=${DIFY_BASE_URL}
-      - DIFY_API_KEY=${DIFY_API_KEY}
+      DATABASE_HOST: ${DATABASE_HOST}
+      DATABASE_PORT: ${DATABASE_PORT}
+      DATABASE_NAME: ${DATABASE_NAME}
+      DATABASE_USER: ${DATABASE_USER}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
+      DIFY_BASE_URL: ${DIFY_BASE_URL}
+      DIFY_API_KEY: ${DIFY_API_KEY}
+      ONLYOFFICE_DOC_SERVER_URL: ${ONLYOFFICE_DOC_SERVER_URL}
+      ONLYOFFICE_SECRET: ${ONLYOFFICE_SECRET}
+      ONLYOFFICE_CALLBACK_URL: ${ONLYOFFICE_CALLBACK_URL}
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
     volumes:
       - ./backend:/app
-    networks:
-      - patent-writer-network
 
+    networks:
+      - patent-writer-net
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ============================================
+  # 前端服务 — React + Vite (生产模式 serve)
+  # ============================================
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+
+    container_name: patent-writer-frontend
+    restart: unless-stopped
+
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
+
     environment:
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    depends_on:
-      - backend
-    networks:
-      - patent-writer-network
 
+    networks:
+      - patent-writer-net
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ============================================
+  # PostgreSQL 数据库
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+
+    container_name: patent-writer-postgres
+    restart: unless-stopped
+
+    ports:
+      - "${DATABASE_PORT:-5432}:5432"
+
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # 初始化脚本（如有）
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - patent-writer-net
+
+# ============================================
+# 网络
+# ============================================
 networks:
-  patent-writer-network:
+  patent-writer-net:
     driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+
+# ============================================
+# 持久化卷
+# ============================================
+volumes:
+  postgres_data:
+    name: patent-writer-postgres-data
