@@ -1,8 +1,8 @@
-# 构建阶段
-FROM node:22-alpine AS builder
+# 构建阶段 — 使用阿里云镜像加速
+FROM registry.cn-hangzhou.aliyuncs.com/library/node:22-alpine AS builder
 
-# Alpine 缺少 node-gyp 所需的编译工具
-# RUN apk add --no-cache python3 make g++
+# npm 使用淘宝镜像
+RUN npm config set registry https://registry.npmmirror.com
 
 WORKDIR /app
 
@@ -15,7 +15,10 @@ COPY . .
 RUN npm run build
 
 # 运行阶段 — 最小镜像
-FROM node:22-alpine AS runner
+FROM registry.cn-hangzhou.aliyuncs.com/library/node:22-alpine AS runner
+
+# npm 使用淘宝镜像
+RUN npm config set registry https://registry.npmmirror.com
 
 WORKDIR /app
 
