@@ -78,6 +78,7 @@ export const knowledgeApi = {
 
     const response = await fetch(url, { method: 'POST', body: formData })
     if (!response.ok) {
+
       const err = await response.json().catch(() => ({ detail: '上传失败' }))
       throw new Error(err.detail || '上传失败')
     }

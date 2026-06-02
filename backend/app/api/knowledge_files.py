@@ -126,6 +126,7 @@ async def upload_knowledge_file(
                 filename=raw_filename,
                 content_type=file.content_type or "application/octet-stream",
             )
+
             # 根据配置的索引模式决定上传参数
             # economy: 关键词匹配，无需 Embedding 模型
             # high_quality: 向量检索，需要 Embedding 模型已配置
