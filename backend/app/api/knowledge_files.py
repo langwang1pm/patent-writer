@@ -1,6 +1,7 @@
 """知识库文件管理 API"""
 import uuid
 import aiohttp
+from aiohttp import FormData
 import os
 from pathlib import Path
 from typing import Annotated
