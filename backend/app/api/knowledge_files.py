@@ -132,7 +132,7 @@ async def upload_knowledge_file(
             # 根据配置的索引模式决定上传参数
             # economy: 关键词匹配，无需 Embedding 模型
             # high_quality: 向量检索，需要 Embedding 模型已配置
-            indexing_technique = getattr(config, 'indexing_technique', 'economy') or 'economy'
+            indexing_technique = getattr(config, 'indexing_technique', 'economy') or 'high_quality'
             # form_data.add_field(
             #     "data",
             #     f'{{"indexing_technique":"{indexing_technique}","process_rule":{{"mode":"automatic"}}}}',
