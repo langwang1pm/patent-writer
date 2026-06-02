@@ -1,5 +1,5 @@
 # 构建阶段 — 使用阿里云镜像加速
-FROM registry.cn-hangzhou.aliyuncs.com/library/node:22-alpine AS builder
+FROM node:22-alpine AS builder
 
 # npm 使用淘宝镜像
 RUN npm config set registry https://registry.npmmirror.com
@@ -15,7 +15,7 @@ COPY . .
 RUN npm run build
 
 # 运行阶段 — 最小镜像
-FROM registry.cn-hangzhou.aliyuncs.com/library/node:22-alpine AS runner
+FROM node:22-alpine AS runner
 
 # npm 使用淘宝镜像
 RUN npm config set registry https://registry.npmmirror.com
