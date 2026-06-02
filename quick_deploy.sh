@@ -76,18 +76,7 @@ if [ ! -f "package.json" ]; then
     exit 1
 fi
 
-if [ ! -f "package-lock.json" ]; then
-    log_warn "package-lock.json 不存在，正在生成..."
-    if command -v npm &> /dev/null; then
-        npm install
-        log_info "package-lock.json 已生成"
-    else
-        log_error "npm 未安装，无法生成 package-lock.json"
-        exit 1
-    fi
-else
-    log_info "package-lock.json 已就绪"
-fi
+log_info "package.json 已就绪（Dockerfile 中 npm install 自动处理依赖）"
 
 cd ..
 
@@ -111,8 +100,8 @@ $COMPOSE_CMD down --remove-orphans 2>/dev/null || true
 # ---- 拉取基础镜像（提前预热，跨架构友好）----
 log_info "步骤6: 预热基础镜像..."
 
-docker pull python:3.11-slim || log_warn "预拉取失败，继续构建..."
-docker pull node:20-alpine || log_warn "预拉取失败，继续构建..."
+docker pull python:3.13-slim || log_warn "预拉取失败，继续构建..."
+docker pull node:22-alpine || log_warn "预拉取失败，继续构建..."
 docker pull postgres:16-alpine || log_warn "预拉取失败，继续构建..."
 
 # ---- 构建 + 启动 ----
