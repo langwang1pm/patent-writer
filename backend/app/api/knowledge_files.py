@@ -190,6 +190,7 @@ async def upload_knowledge_file(
             }
             data_json = json.dumps(data_payload)
 
+
             # 构建 form data
             form_data = FormData()
             form_data.add_field(
