@@ -273,7 +273,10 @@ async def download_knowledge_file(
                 f"/datasets/{config.knowledge_id}/documents/{file_id}/download",
             )
 
-            async with aiohttp.ClientSession() as session:
+            # 导入 timeout 类 (如果文件头部没有，需在顶部添加: from aiohttp import ClientTimeout)
+            timeout = aiohttp.ClientTimeout(total=300)  # 设置总超时为 300 秒 (5分钟)，给 Embedding 足够的时间
+
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 headers = {
                     "Authorization": f"Bearer {config.dify_api_key}",
                 }
@@ -305,6 +308,19 @@ async def download_knowledge_file(
                     )
 
         except aiohttp.ClientError as e:
+            # 添加详细日志，区分是超时还是连接拒绝
+            import traceback
+            print(f"=== Dify 请求失败详细日志 ===")
+            print(f"错误类型: {type(e).__name__}")
+            print(f"错误信息: {str(e)}")
+            print(f"堆栈跟踪: {traceback.format_exc()}")
+            print(f"==========================")
+
+            # 如果是超时，给出更友好的提示
+            if isinstance(e, aiohttp.ClientTimeout):
+                raise HTTPException(status_code=504,
+                                    detail="上传超时：文件较大或 Embedding 模型处理较慢，请稍后重试或检查 Dify 服务状态")
+
             raise HTTPException(status_code=500, detail=f"连接 Dify 失败: {str(e)}")
 
 
