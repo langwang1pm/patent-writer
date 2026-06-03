@@ -127,58 +127,82 @@ async def upload_knowledge_file(
     try:
         async with aiohttp.ClientSession() as session:
             url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/document/create_by_file"
+            # form_data = FormData()
+            # form_data.add_field(
+            #     "file", file_content,
+            #     filename=raw_filename,
+            #     content_type=file.content_type or "application/octet-stream",
+            # )
+            #
+            # # 根据配置的索引模式决定上传参数
+            # # economy: 关键词匹配，无需 Embedding 模型
+            # # high_quality: 向量检索，需要 Embedding 模型已配置
+            # indexing_technique = getattr(config, 'indexing_technique', 'high_quality') or 'high_quality'
+            #
+            # # 修改后（建议尝试这种更完整的结构，兼容性强）
+            # import json
+            # payload = {
+            #     "indexing_technique": indexing_technique,
+            #     "process_rule": {
+            #         "mode": "automatic",
+            #         "rules": {
+            #             "pre_processing_rules": [
+            #                 {"id": "remove_extra_spaces", "enabled": True},
+            #                 {"id": "remove_urls_emails", "enabled": False}
+            #             ],
+            #             "segmentation": {
+            #                 "separator": "\n",
+            #                 "max_tokens": 500
+            #             }
+            #         }
+            #     }
+            # }
+            #
+            # logger.info(f"准备上传到 Dify: URL={url}, indexing_technique={indexing_technique}, data={data_json}")
+            #
+            # form_data.add_field(
+            #     "data",
+            #     json.dumps({
+            #         "indexing_technique": indexing_technique,
+            #         "process_rule": {"mode": "automatic"}
+            #     })
+            #     # 不再指定 content_type
+            # )
+            # headers = {"Authorization": f"Bearer {config.dify_api_key}"}
+            #
+            # payload_str = json.dumps({
+            #     "indexing_technique": indexing_technique,
+            #     "process_rule": {"mode": "automatic"}
+            # })
+            # print(f"DEBUG: Sending to Dify - indexing_technique: {indexing_technique}")
+            # print(f"DEBUG: Sending to Dify - data payload: {payload_str}")
+            # # print(f"DEBUG: File size being sent: {len(file_content)}")
+            #
+            # form_data.add_field("data", payload_str)
+
+            # 根据配置的索引模式决定上传参数
+            indexing_technique = getattr(config, 'indexing_technique', 'high_quality') or 'high_quality'
+
+            # 构建 data 参数
+            data_payload = {
+                "indexing_technique": indexing_technique,
+                "process_rule": {"mode": "automatic"}
+            }
+            data_json = json.dumps(data_payload)
+
+            # 构建 form data
             form_data = FormData()
             form_data.add_field(
                 "file", file_content,
                 filename=raw_filename,
                 content_type=file.content_type or "application/octet-stream",
             )
+            form_data.add_field("data", data_json)
 
-            # 根据配置的索引模式决定上传参数
-            # economy: 关键词匹配，无需 Embedding 模型
-            # high_quality: 向量检索，需要 Embedding 模型已配置
-            indexing_technique = getattr(config, 'indexing_technique', 'high_quality') or 'high_quality'
-
-            # 修改后（建议尝试这种更完整的结构，兼容性强）
-            import json
-            payload = {
-                "indexing_technique": indexing_technique,
-                "process_rule": {
-                    "mode": "automatic",
-                    "rules": {
-                        "pre_processing_rules": [
-                            {"id": "remove_extra_spaces", "enabled": True},
-                            {"id": "remove_urls_emails", "enabled": False}
-                        ],
-                        "segmentation": {
-                            "separator": "\n",
-                            "max_tokens": 500
-                        }
-                    }
-                }
-            }
+            headers = {"Authorization": f"Bearer {config.dify_api_key}"}
 
             logger.info(f"准备上传到 Dify: URL={url}, indexing_technique={indexing_technique}, data={data_json}")
 
-            form_data.add_field(
-                "data",
-                json.dumps({
-                    "indexing_technique": indexing_technique,
-                    "process_rule": {"mode": "automatic"}
-                })
-                # 不再指定 content_type
-            )
-            headers = {"Authorization": f"Bearer {config.dify_api_key}"}
-
-            payload_str = json.dumps({
-                "indexing_technique": indexing_technique,
-                "process_rule": {"mode": "automatic"}
-            })
-            print(f"DEBUG: Sending to Dify - indexing_technique: {indexing_technique}")
-            print(f"DEBUG: Sending to Dify - data payload: {payload_str}")
-            # print(f"DEBUG: File size being sent: {len(file_content)}")
-
-            form_data.add_field("data", payload_str)
 
             async with session.post(url, data=form_data, headers=headers) as response:
                 response_text = await response.text()
