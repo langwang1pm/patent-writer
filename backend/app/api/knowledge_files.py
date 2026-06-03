@@ -1,7 +1,6 @@
 """知识库文件管理 API"""
 import uuid
 import aiohttp
-from aiohttp import FormData
 import os
 import json
 import logging
@@ -11,16 +10,18 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from aiohttp import FormData
 
 from app.dependencies import get_db
 from app.models.knowledge_config import KnowledgeConfig
 from app.models.knowledge_file import KnowledgeFile
 
-logger = logging.getLogger(__name__)
 
 # 本地文件存储目录
 UPLOAD_DIR = Path("uploads/knowledge_files")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
