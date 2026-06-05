@@ -4,3 +4,15 @@
 
 4. 文档的正文内容，不是流式输出的
 5. 没有实现引用列表
+
+
+备忘：
+后端（端口 8002）
+cd D:\PycharmProject\patent-writer\backend
+venv\Scripts\activate
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8002
+
+
+前端（端口 3000）
+cd D:\PycharmProject\patent-writer\frontend
+npm run dev

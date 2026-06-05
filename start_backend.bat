@@ -31,8 +31,8 @@ if not exist ".env" (
 )
 
 echo.
-echo 启动后端服务 (端口 %BACKEND_PORT%)...
-uvicorn app.main:app --reload --host 0.0.0.0 --port %BACKEND_PORT%
+echo 启动后端服务 (端口 8002)...
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8002
 
 REM 注意：如果使用 PowerShell，可以使用以下命令加载环境变量：
 REM Get-Content .env.prod | ForEach-Object { $name, $value = $_ -split '=', 2; [System.Environment]::SetEnvironmentVariable($name, $value, 'Process') }
