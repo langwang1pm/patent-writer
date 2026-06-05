@@ -14,7 +14,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8002',
         changeOrigin: true,
         // SSE 流式输出必须：禁用 http-proxy 缓冲，否则数据会攒到最后一刻才发给 EventSource
         configure: (proxy) => {
