@@ -77,7 +77,7 @@ class ProjectWorkspaceService:
             )
         
         project_workspace = ProjectWorkspace(
-            name=project_workspace_in.name,
+            workspace_name=project_workspace_in.workspace_name,
             enterprise_info_id=project_workspace_in.enterprise_info_id,
             task_type_id=project_workspace_in.task_type_id
         )

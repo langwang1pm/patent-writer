@@ -85,7 +85,7 @@ export default function ProjectWorkspacePage() {
               onClick={openCreateModal}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
             >
-              创建项目空间
+              新建第一个项目空间
             </button>
           </div>
         )}
@@ -99,7 +99,7 @@ export default function ProjectWorkspacePage() {
                 className="bg-white rounded-lg shadow hover:shadow-lg transition p-6 border border-gray-200"
               >
                 <div className="flex justify-between items-start mb-4">
-                  <h3 className="text-xl font-semibold text-gray-900">{project.name}</h3>
+                  <h3 className="text-xl font-semibold text-gray-900">{project.workspace_name}</h3>
                   <div className="flex gap-2">
                     <button
                       onClick={() => openEditModal(project)}
@@ -164,7 +164,7 @@ export default function ProjectWorkspacePage() {
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-xl font-semibold mb-4">确认删除</h3>
             <p className="text-gray-600 mb-6">
-              确定要删除项目空间「{deleteConfirm.name}」吗？此操作不可撤销。
+              确定要删除项目空间「{deleteConfirm.workspace_name}」吗？此操作不可撤销。
             </p>
             <div className="flex justify-end gap-4">
               <button

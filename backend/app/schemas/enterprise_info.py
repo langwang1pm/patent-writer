@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class EnterpriseInfoBase(BaseModel):
     """企业信息基础 Schema"""
-    name: str = Field(..., description="企业名称")
+    enterprise_name: str = Field(..., description="企业全称")
     description: str | None = Field(None, description="描述")
 
 
@@ -17,7 +17,7 @@ class EnterpriseInfoCreate(EnterpriseInfoBase):
 
 class EnterpriseInfoUpdate(BaseModel):
     """更新企业信息（部分字段可选）"""
-    name: str | None = Field(None, description="企业名称")
+    enterprise_name: str | None = Field(None, description="企业全称")
     description: str | None = Field(None, description="描述")
 
 

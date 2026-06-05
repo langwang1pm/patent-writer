@@ -6,8 +6,9 @@ from pydantic import BaseModel, Field
 
 class TaskTypeBase(BaseModel):
     """任务类型基础 Schema"""
-    name: str = Field(..., description="任务类型名称")
-    description: str | None = Field(None, description="描述")
+    task_name: str = Field(..., description="类型名称，例如：合同、报告")
+    description: str | None = Field(None, description="类型说明")
+    is_active: bool = Field(True, description="是否启用：true启用，false停用")
 
 
 class TaskTypeCreate(TaskTypeBase):
@@ -17,8 +18,9 @@ class TaskTypeCreate(TaskTypeBase):
 
 class TaskTypeUpdate(BaseModel):
     """更新任务类型（部分字段可选）"""
-    name: str | None = Field(None, description="任务类型名称")
-    description: str | None = Field(None, description="描述")
+    task_name: str | None = Field(None, description="类型名称")
+    description: str | None = Field(None, description="类型说明")
+    is_active: bool | None = Field(None, description="是否启用")
 
 
 class TaskTypeInDB(TaskTypeBase):

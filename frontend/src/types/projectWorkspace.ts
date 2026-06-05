@@ -1,7 +1,7 @@
 /** 项目空间 */
 export interface ProjectWorkspace {
   id: string;
-  name: string;
+  workspace_name: string;
   enterprise_info_id: string;
   task_type_id: string;
   created_at: string;
@@ -12,14 +12,14 @@ export interface ProjectWorkspace {
 
 /** 创建项目空间请求 */
 export interface ProjectWorkspaceCreateRequest {
-  name: string;
+  workspace_name: string;
   enterprise_info_id: string;
   task_type_id: string;
 }
 
 /** 更新项目空间请求 */
 export interface ProjectWorkspaceUpdateRequest {
-  name?: string;
+  workspace_name?: string;
   enterprise_info_id?: string;
   task_type_id?: string;
 }

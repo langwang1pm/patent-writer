@@ -10,7 +10,7 @@ from app.schemas.task_type import TaskTypeResponse
 
 class ProjectWorkspaceBase(BaseModel):
     """项目空间基础 Schema"""
-    name: str = Field(..., description="项目空间名称")
+    workspace_name: str = Field(..., description="项目空间名称")
     enterprise_info_id: UUID = Field(..., description="客户企业ID")
     task_type_id: UUID = Field(..., description="任务类型ID")
 
@@ -22,7 +22,7 @@ class ProjectWorkspaceCreate(ProjectWorkspaceBase):
 
 class ProjectWorkspaceUpdate(BaseModel):
     """更新项目空间（部分字段可选）"""
-    name: str | None = Field(None, description="项目空间名称")
+    workspace_name: str | None = Field(None, description="项目空间名称")
     enterprise_info_id: UUID | None = Field(None, description="客户企业ID")
     task_type_id: UUID | None = Field(None, description="任务类型ID")
 

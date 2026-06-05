@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from sqlalchemy import String, Text, DateTime
+from sqlalchemy import String, Text, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,7 +19,7 @@ def now_cst() -> datetime:
 
 class EnterpriseInfo(Base):
     """企业信息模型（客户企业）"""
-    __tablename__ = "enterprise_infos"
+    __tablename__ = "enterprise_info"
     __table_args__ = {"schema": "patentwriter"}
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -27,24 +27,24 @@ class EnterpriseInfo(Base):
         primary_key=True,
         default=uuid.uuid4
     )
-    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="企业名称")
-    description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="描述")
+    enterprise_name: Mapped[str] = mapped_column(String(200), nullable=False, comment="企业全称")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime,
         nullable=False,
-        default=now_cst
+        default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime,
         nullable=False,
-        default=now_cst,
-        onupdate=now_cst
+        default=func.now(),
+        onupdate=func.now()
     )
 
     # 关系
-    project_workspaces: Mapped[list["ProjectWorkspace"]] = relationship(
+    project_workspace: Mapped["ProjectWorkspace"] = relationship(
         "ProjectWorkspace",
-        back_populates="enterprise_info"
+        back_populates="enterprise_info",
+        primaryjoin="EnterpriseInfo.id == ProjectWorkspace.enterprise_info_id"
     )
 
 

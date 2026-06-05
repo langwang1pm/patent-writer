@@ -1,26 +1,33 @@
+import { useEffect } from "react";
 import type { ProjectWorkspaceWithRelations } from "../../types/projectWorkspace";
 
 interface ProjectWorkspaceModalProps {
   editingProject: ProjectWorkspaceWithRelations | null; // null = 创建模式
-  onSubmit: (data: { name: string; enterprise_info_id: string; task_type_id: string }) => Promise<void>;
+  onSubmit: (data: { workspace_name: string; enterprise_info_id: string; task_type_id: string }) => Promise<void>;
   onClose: () => void;
 }
 
 export default function ProjectWorkspaceModal({ editingProject, onSubmit, onClose }: ProjectWorkspaceModalProps) {
-  const { enterpriseInfos, taskTypes } = useProjectWorkspaceStore();
+  const { enterpriseInfos, taskTypes, fetchEnterpriseInfos, fetchTaskTypes } = useProjectWorkspaceStore();
+
+  // 组件挂载时加载下拉选项数据
+  useEffect(() => {
+    fetchEnterpriseInfos();
+    fetchTaskTypes();
+  }, [fetchEnterpriseInfos, fetchTaskTypes]);
   
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
     const data = {
-      name: formData.get("name") as string,
+      workspace_name: formData.get("workspace_name") as string,
       enterprise_info_id: formData.get("enterprise_info_id") as string,
       task_type_id: formData.get("task_type_id") as string,
     };
     
     // 简单验证
-    if (!data.name.trim()) {
+    if (!data.workspace_name.trim()) {
       alert("请输入项目空间名称");
       return;
     }
@@ -59,8 +66,8 @@ export default function ProjectWorkspaceModal({ editingProject, onSubmit, onClos
             </label>
             <input
               type="text"
-              name="name"
-              defaultValue={editingProject?.name || ""}
+              name="workspace_name"
+              defaultValue={editingProject?.workspace_name || ""}
               placeholder="请输入项目空间名称"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               required
@@ -81,7 +88,7 @@ export default function ProjectWorkspaceModal({ editingProject, onSubmit, onClos
               <option value="">请选择客户企业</option>
               {enterpriseInfos.map((enterprise) => (
                 <option key={enterprise.id} value={enterprise.id}>
-                  {enterprise.name}
+                  {enterprise.enterprise_name}
                 </option>
               ))}
             </select>
@@ -101,7 +108,7 @@ export default function ProjectWorkspaceModal({ editingProject, onSubmit, onClos
               <option value="">请选择任务类型</option>
               {taskTypes.map((taskType) => (
                 <option key={taskType.id} value={taskType.id}>
-                  {taskType.name}
+                  {taskType.task_name}
                 </option>
               ))}
             </select>

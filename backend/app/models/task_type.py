@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from sqlalchemy import String, Text, DateTime
+from sqlalchemy import String, Text, DateTime, Boolean, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,7 +19,7 @@ def now_cst() -> datetime:
 
 class TaskType(Base):
     """任务类型模型（要编写的文档类型）"""
-    __tablename__ = "task_types"
+    __tablename__ = "task_type"
     __table_args__ = {"schema": "patentwriter"}
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -27,24 +27,26 @@ class TaskType(Base):
         primary_key=True,
         default=uuid.uuid4
     )
-    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="任务类型名称")
-    description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="描述")
+    task_name: Mapped[str] = mapped_column(String(100), nullable=False, comment="类型名称，例如：合同、报告")
+    description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="类型说明")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, comment="是否启用：true启用，false停用")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime,
         nullable=False,
-        default=now_cst
+        default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime,
         nullable=False,
-        default=now_cst,
-        onupdate=now_cst
+        default=func.now(),
+        onupdate=func.now()
     )
 
     # 关系
-    project_workspaces: Mapped[list["ProjectWorkspace"]] = relationship(
+    project_workspace: Mapped["ProjectWorkspace"] = relationship(
         "ProjectWorkspace",
-        back_populates="task_type"
+        back_populates="task_type",
+        primaryjoin="TaskType.id == ProjectWorkspace.task_type_id"
     )
 
 
