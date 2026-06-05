@@ -7,6 +7,9 @@ from app.models.knowledge_file import KnowledgeFile
 from app.models.conversation import Conversation
 from app.models.document import Document
 from app.models.citation import Citation
+from app.models.task_type import TaskType
+from app.models.enterprise_info import EnterpriseInfo
+from app.models.project_workspace import ProjectWorkspace
 
 CST_TZ = ZoneInfo("Asia/Shanghai")
 
