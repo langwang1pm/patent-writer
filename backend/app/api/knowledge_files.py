@@ -545,6 +545,39 @@ def _filter_by_enterprise_info_id(item: dict, enterprise_info_id: str) -> bool:
     return False
 
 
+async def _get_metadata_id(
+    session: aiohttp.ClientSession,
+    config: KnowledgeConfig,
+    metadata_name: str,
+) -> str | None:
+    """
+    查询 Dify 知识库的元数据字段列表，返回指定名称的元数据字段 ID。
+    如果找不到，返回 None。
+    """
+    api_key = get_dify_knowledge_api_key() or config.dify_api_key
+    if not api_key:
+        raise Exception("未配置 Dify 知识库 API Key，请在 .env 中设置 DIFY_KNOWLEDGE_API_KEY")
+    
+    url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/metadata"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    
+    async with session.get(url, headers=headers) as response:
+        if response.status != 200:
+            raise Exception(f"查询元数据字段列表失败: {await response.text()}")
+        
+        data = await response.json()
+        metadata_list = data.get("doc_metadata", [])
+        
+        for metadata in metadata_list:
+            if metadata.get("name") == metadata_name:
+                return metadata.get("id")
+        
+        return None
+
+
 async def _add_document_metadata(
     session: aiohttp.ClientSession,
     config: KnowledgeConfig,
@@ -561,22 +594,30 @@ async def _add_document_metadata(
     if not api_key:
         raise Exception("未配置 Dify 知识库 API Key，请在 .env 中设置 DIFY_KNOWLEDGE_API_KEY")
     
+    # 先查询 company 元数据字段的 ID
+    company_metadata_id = await _get_metadata_id(session, config, "company")
+    if not company_metadata_id:
+        logger.warning(f"⚠️ 知识库中不存在 company 元数据字段，跳过元数据添加")
+        return
+    
     url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/documents/metadata"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     payload = {
-        "operation_data": {
-            "documents": [
-                {
-                    "document_id": document_id,
-                    "metadata": [
-                        {"name": "company", "value": enterprise_info_id}
-                    ]
-                }
-            ]
-        }
+        "operation_data": [
+            {
+                "document_id": document_id,
+                "metadata_list": [
+                    {
+                        "id": company_metadata_id,
+                        "name": "company",
+                        "value": enterprise_info_id
+                    }
+                ]
+            }
+        ]
     }
     
     # 脱敏打印 API Key（只显示前10个字符）
