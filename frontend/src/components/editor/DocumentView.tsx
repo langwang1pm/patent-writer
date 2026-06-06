@@ -11,7 +11,7 @@ import type { ChatDocument } from '@/types/conversation'
 import { marked } from 'marked'
 
 export default function DocumentView() {
-  const { documentId } = useParams()
+  const { documentId, projectId } = useParams<{ documentId: string; projectId: string }>()
   const navigate = useNavigate()
   const { setCitations, citations } = useCitationStore()
   const [document, setDocument] = useState<ChatDocument | null>(null)
@@ -103,7 +103,7 @@ export default function DocumentView() {
         <div className="text-center">
           <p className="text-gray-500">文档不存在</p>
           <button
-            onClick={() => navigate('/chat')}
+            onClick={() => projectId && navigate(`/project/${projectId}/chat`)}
             className="mt-4 text-primary-600 hover:text-primary-700"
           >
             返回对话
@@ -119,7 +119,7 @@ export default function DocumentView() {
       <div className="h-12 px-4 flex items-center justify-between border-b border-gray-200 bg-white shrink-0">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/chat')}
+            onClick={() => projectId && navigate(`/project/${projectId}/chat`)}
             className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
           >
             <ChevronLeft className="w-4 h-4" />

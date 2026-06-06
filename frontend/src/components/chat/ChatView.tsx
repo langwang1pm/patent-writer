@@ -43,7 +43,7 @@ const STREAM_PHASE_CONFIG: Record<
 
 export default function ChatView() {
   const navigate = useNavigate()
-  const { conversationId } = useParams()
+  const { conversationId, projectId } = useParams<{ conversationId: string; projectId: string }>()
   const {
     messages,
     currentConversationId,
@@ -105,7 +105,9 @@ export default function ChatView() {
   const handleQuickCreate = async () => {
     try {
       const conversation = await createConversation()
-      navigate(`/chat/${conversation.id}`)
+      if (projectId) {
+        navigate(`/project/${projectId}/chat/${conversation.id}`)
+      }
     } catch (error) {
       console.error('创建对话失败:', error)
     }

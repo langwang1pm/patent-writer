@@ -8,7 +8,8 @@ import { useConversationStore } from '@/stores/conversationStore'
 
 export default function Sidebar() {
   const navigate = useNavigate()
-  const params = useParams()
+  const params = useParams<{ projectId: string; conversationId: string }>()
+  const { projectId } = params
   const {
     conversations,
     fetchConversations,
@@ -78,7 +79,9 @@ export default function Sidebar() {
     setIsCreating(true)
     try {
       const conversation = await createConversation()
-      navigate(`/chat/${conversation.id}`)
+      if (projectId) {
+        navigate(`/project/${projectId}/chat/${conversation.id}`)
+      }
     } catch (error) {
       console.error('创建对话失败:', error)
     } finally {
@@ -132,8 +135,9 @@ export default function Sidebar() {
       {/* 顶部操作区 */}
       <div className="p-3 space-y-2">
         <button
-          onClick={() => navigate('/knowledge')}
-          className="w-full flex items-center gap-2 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          onClick={() => projectId && navigate(`/project/${projectId}/knowledge`)}
+          disabled={!projectId}
+          className="w-full flex items-center gap-2 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
           <BookOpen className="w-4 h-4" />
           <span>知识库</span>
@@ -184,7 +188,7 @@ export default function Sidebar() {
                     ? 'bg-primary-50 border border-primary-200'
                     : 'hover:bg-gray-200'
                 )}
-                onClick={() => navigate(`/chat/${conversation.id}`)}
+                onClick={() => projectId && navigate(`/project/${projectId}/chat/${conversation.id}`)}
               >
                 <div className="flex items-start gap-2">
                   <MessageSquare className={cn('w-4 h-4 mt-0.5 shrink-0', currentConversationId === conversation.id ? 'text-primary-600' : 'text-gray-400')} />
@@ -235,8 +239,8 @@ export default function Sidebar() {
                       e.stopPropagation()
                       if (confirm('确定删除这个对话吗？')) {
                         await deleteConversation(conversation.id)
-                        if (currentConversationId === conversation.id) {
-                          navigate('/chat')
+                        if (currentConversationId === conversation.id && projectId) {
+                          navigate(`/project/${projectId}/chat`)
                         }
                       }
                     }}

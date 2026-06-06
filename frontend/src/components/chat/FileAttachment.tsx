@@ -31,6 +31,8 @@ export default function FileAttachment({
   onPreview,
 }: FileAttachmentProps) {
   const navigate = useNavigate()
+  // 从当前 URL 提取 projectId（如果在项目空间内）
+  const projectId = window.location.pathname.match(/\/project\/([a-f0-9-]+)/)?.[1]
   const ext = fileName.split('.').pop()?.toLowerCase() ?? ''
   const colorCls = extColor(ext)
   const hasDocument = !!documentId
@@ -52,9 +54,11 @@ export default function FileAttachment({
       onPreview()
       return
     }
-    // 跳转到文档编辑器页面（使用已有的 /document/:documentId 路由）
+    // 跳转到文档编辑器页面（需要在项目空间路由下）
     if (hasDocument) {
-      navigate(`/document/${documentId}`)
+      if (projectId) {
+        navigate(`/project/${projectId}/document/${documentId}`)
+      }
     }
   }
 

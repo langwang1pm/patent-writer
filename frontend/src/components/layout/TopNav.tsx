@@ -8,6 +8,8 @@ interface TopNavProps {
 export default function TopNav({ onToggleRightPanel }: TopNavProps = {}) {
   const navigate = useNavigate()
   const location = useLocation()
+  // 从当前 URL 提取 projectId
+  const projectId = location.pathname.match(/\/project\/([a-f0-9-]+)/)?.[1]
 
   // 使用属性（避免 TypeScript 报错）
   void onToggleRightPanel
@@ -25,10 +27,10 @@ export default function TopNav({ onToggleRightPanel }: TopNavProps = {}) {
 
       {/* 中间 - 面包屑 */}
       <div className="flex items-center gap-2 text-sm">
-        {location.pathname.startsWith('/document/') && (
+        {location.pathname.includes('/document/') && projectId && (
           <>
             <button
-              onClick={() => navigate('/chat')}
+              onClick={() => projectId && navigate(`/project/${projectId}/chat`)}
               className="flex items-center gap-1 text-gray-500 hover:text-gray-700 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
