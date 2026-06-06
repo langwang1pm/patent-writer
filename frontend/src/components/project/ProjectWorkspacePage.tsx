@@ -121,11 +121,11 @@ export default function ProjectWorkspacePage() {
                 <div className="space-y-2 text-sm text-gray-600">
                   <div className="flex items-center gap-2">
                     <span>🏢</span>
-                    <span>{project.enterprise_info?.name || "未设置企业"}</span>
+                    <span>{project.enterprise_info?.enterprise_name || "未设置企业"}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span>📄</span>
-                    <span>{project.task_type?.name || "未设置任务类型"}</span>
+                    <span>{project.task_type?.task_name || "未设置任务类型"}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span>🕒</span>

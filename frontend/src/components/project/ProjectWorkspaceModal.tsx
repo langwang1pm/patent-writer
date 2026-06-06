@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { ProjectWorkspaceWithRelations } from "../../types/projectWorkspace";
 
 interface ProjectWorkspaceModalProps {
@@ -10,6 +10,24 @@ interface ProjectWorkspaceModalProps {
 export default function ProjectWorkspaceModal({ editingProject, onSubmit, onClose }: ProjectWorkspaceModalProps) {
   const { enterpriseInfos, taskTypes, fetchEnterpriseInfos, fetchTaskTypes } = useProjectWorkspaceStore();
 
+  // 受控组件状态：解决 defaultValue 选项异步加载后不回显 + prefixUrl 报错
+  const [workspaceName, setWorkspaceName] = useState<string>("");
+  const [selectedEnterpriseId, setSelectedEnterpriseId] = useState<string>("");
+  const [selectedTaskTypeId, setSelectedTaskTypeId] = useState<string>("");
+
+  // editingProject 变化时同步所有表单值
+  useEffect(() => {
+    if (editingProject) {
+      setWorkspaceName(editingProject.workspace_name || "");
+      setSelectedEnterpriseId(editingProject.enterprise_info_id || "");
+      setSelectedTaskTypeId(editingProject.task_type_id || "");
+    } else {
+      setWorkspaceName("");
+      setSelectedEnterpriseId("");
+      setSelectedTaskTypeId("");
+    }
+  }, [editingProject]);
+
   // 组件挂载时加载下拉选项数据
   useEffect(() => {
     fetchEnterpriseInfos();
@@ -18,16 +36,16 @@ export default function ProjectWorkspaceModal({ editingProject, onSubmit, onClos
   
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
     
+    // 使用受控 state 值而非 FormData（避免 defaultValue/value 混用导致取值不一致）
     const data = {
-      workspace_name: formData.get("workspace_name") as string,
-      enterprise_info_id: formData.get("enterprise_info_id") as string,
-      task_type_id: formData.get("task_type_id") as string,
+      workspace_name: workspaceName.trim(),
+      enterprise_info_id: selectedEnterpriseId,
+      task_type_id: selectedTaskTypeId,
     };
     
     // 简单验证
-    if (!data.workspace_name.trim()) {
+    if (!data.workspace_name) {
       alert("请输入项目空间名称");
       return;
     }
@@ -66,8 +84,8 @@ export default function ProjectWorkspaceModal({ editingProject, onSubmit, onClos
             </label>
             <input
               type="text"
-              name="workspace_name"
-              defaultValue={editingProject?.workspace_name || ""}
+              value={workspaceName}
+              onChange={(e) => setWorkspaceName(e.target.value)}
               placeholder="请输入项目空间名称"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               required
@@ -80,8 +98,8 @@ export default function ProjectWorkspaceModal({ editingProject, onSubmit, onClos
               客户企业 *
             </label>
             <select
-              name="enterprise_info_id"
-              defaultValue={editingProject?.enterprise_info_id || ""}
+              value={selectedEnterpriseId}
+              onChange={(e) => setSelectedEnterpriseId(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               required
             >
@@ -96,12 +114,12 @@ export default function ProjectWorkspaceModal({ editingProject, onSubmit, onClos
           
           {/* 任务类型 */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-700 mb-2">
               任务类型（文档类型） *
             </label>
             <select
-              name="task_type_id"
-              defaultValue={editingProject?.task_type_id || ""}
+              value={selectedTaskTypeId}
+              onChange={(e) => setSelectedTaskTypeId(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               required
             >

@@ -15,7 +15,7 @@ export async function getProjectWorkspaces(skip = 0, limit = 100): Promise<Proje
 
 /** 获取单个项目空间 */
 export async function getProjectWorkspace(id: string): Promise<ProjectWorkspaceWithRelations> {
-  return api.get(`/${id}`).json<ProjectWorkspaceWithRelations>();
+  return api.get(`${id}`).json<ProjectWorkspaceWithRelations>();
 }
 
 /** 创建项目空间 */
@@ -25,10 +25,10 @@ export async function createProjectWorkspace(data: ProjectWorkspaceCreateRequest
 
 /** 更新项目空间 */
 export async function updateProjectWorkspace(id: string, data: ProjectWorkspaceUpdateRequest): Promise<ProjectWorkspaceWithRelations> {
-  return api.put(`/${id}`, { json: data }).json<ProjectWorkspaceWithRelations>();
+  return api.put(`${id}`, { json: data }).json<ProjectWorkspaceWithRelations>();
 }
 
 /** 删除项目空间 */
 export async function deleteProjectWorkspace(id: string): Promise<void> {
-  await api.delete(`/${id}`);
+  await api.delete(`${id}`);
 }
