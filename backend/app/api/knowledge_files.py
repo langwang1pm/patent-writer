@@ -226,9 +226,8 @@ async def upload_knowledge_file(
             }
             data_json = json.dumps(data_payload)
 
-
-            # 构建 form data
-            form_data = FormData()
+            # 构建 form data - 关键：设置 quote_fields=False 避免中文文件名被编码
+            form_data = FormData(quote_fields=False)
             form_data.add_field(
                 "file", file_content,
                 filename=raw_filename,
