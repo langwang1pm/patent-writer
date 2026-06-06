@@ -34,11 +34,11 @@ export default function ProjectWorkspacePage() {
     }
   };
   
-  const handleCreateSubmit = async (data: { name: string; enterprise_info_id: string; task_type_id: string }) => {
+  const handleCreateSubmit = async (data: { workspace_name: string; enterprise_info_id: string; task_type_id: string }) => {
     await createProjectWorkspace(data);
   };
   
-  const handleEditSubmit = async (data: { name: string; enterprise_info_id: string; task_type_id: string }) => {
+  const handleEditSubmit = async (data: { workspace_name: string; enterprise_info_id: string; task_type_id: string }) => {
     if (editingProject) {
       await updateProjectWorkspace(editingProject.id, data);
     }

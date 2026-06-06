@@ -46,10 +46,10 @@ export interface KnowledgeState {
   deleteConfig: (id: string) => Promise<void>
   testConnection: (id: string) => Promise<void>
 
-  fetchFiles: (page?: number, pageSize?: number) => Promise<void>
-  uploadFile: (file: File) => Promise<void>
+  fetchFiles: (page?: number, pageSize?: number, enterpriseInfoId?: string) => Promise<void>
+  uploadFile: (file: File, enterpriseInfoId?: string) => Promise<void>
   deleteFile: (fileId: string) => Promise<void>
-  searchFiles: (query: string, page?: number, pageSize?: number) => Promise<void>
+  searchFiles: (query: string, page?: number, pageSize?: number, knowledgeConfigId?: string, enterpriseInfoId?: string) => Promise<void>
   clearError: () => void
   setPage: (page: number) => void
   setPageSize: (pageSize: number) => void

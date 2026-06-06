@@ -1,3 +1,6 @@
+import type { EnterpriseInfo } from './enterpriseInfo';
+import type { TaskType } from './taskType';
+
 /** 项目空间 */
 export interface ProjectWorkspace {
   id: string;
