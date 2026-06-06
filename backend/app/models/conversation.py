@@ -40,6 +40,26 @@ class Conversation(Base):
         ForeignKey("patentwriter.knowledge_configs.id"),
         nullable=True
     )
+    # 项目空间关联
+    project_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("patentwriter.project_workspace.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="所属项目空间ID"
+    )
+    # 冗余字段：从项目空间自动填充，避免频繁 JOIN
+    enterprise_info_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("patentwriter.enterprise_info.id", ondelete="RESTRICT"),
+        nullable=True,
+        comment="客户企业ID（冗余自项目空间）"
+    )
+    task_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("patentwriter.task_type.id", ondelete="RESTRICT"),
+        nullable=True,
+        comment="任务类型ID（冗余自项目空间）"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -63,6 +83,21 @@ class Conversation(Base):
         "Document",
         back_populates="conversation",
         cascade="all, delete-orphan"
+    )
+    project_workspace: Mapped["ProjectWorkspace | None"] = relationship(
+        "ProjectWorkspace",
+        back_populates="conversations",
+        primaryjoin="Conversation.project_workspace_id == ProjectWorkspace.id"
+    )
+    enterprise_info: Mapped["EnterpriseInfo | None"] = relationship(
+        "EnterpriseInfo",
+        back_populates="conversations",
+        primaryjoin="Conversation.enterprise_info_id == EnterpriseInfo.id"
+    )
+    task_type: Mapped["TaskType | None"] = relationship(
+        "TaskType",
+        back_populates="conversations",
+        primaryjoin="Conversation.task_type_id == TaskType.id"
     )
 
 

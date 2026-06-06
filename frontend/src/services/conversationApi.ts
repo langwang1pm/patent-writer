@@ -3,9 +3,13 @@ import type { Conversation, ConversationListResponse, Message, SendMessageRespon
 
 export const conversationApi = {
   /** 创建对话 */
-  create: async (title?: string, knowledgeConfigId?: string): Promise<Conversation> => {
+  create: async (title?: string, knowledgeConfigId?: string, projectWorkspaceId?: string): Promise<Conversation> => {
     return api.post('conversations', {
-      json: { title: title || '新对话', knowledge_config_id: knowledgeConfigId },
+      json: { 
+        title: title || '新对话', 
+        knowledge_config_id: knowledgeConfigId,
+        project_workspace_id: projectWorkspaceId,
+      },
     }).json()
   },
 

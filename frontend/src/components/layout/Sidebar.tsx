@@ -78,7 +78,7 @@ export default function Sidebar() {
     if (isCreating) return
     setIsCreating(true)
     try {
-      const conversation = await createConversation()
+      const conversation = await createConversation(undefined, undefined, projectId)
       if (projectId) {
         navigate(`/project/${projectId}/chat/${conversation.id}`)
       }

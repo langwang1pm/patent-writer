@@ -54,6 +54,13 @@ class ProjectWorkspace(Base):
         back_populates="project_workspace",
         primaryjoin="ProjectWorkspace.task_type_id == TaskType.id"
     )
+    # 项目空间下的对话列表
+    conversations: Mapped[list["Conversation"]] = relationship(
+        "Conversation",
+        back_populates="project_workspace",
+        primaryjoin="ProjectWorkspace.id == Conversation.project_workspace_id",
+        cascade="all, delete-orphan"
+    )
 
 
 # 前向引用

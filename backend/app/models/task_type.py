@@ -48,7 +48,13 @@ class TaskType(Base):
         back_populates="task_type",
         primaryjoin="TaskType.id == ProjectWorkspace.task_type_id"
     )
+    # 新增：对话列表（反向关系）
+    conversations: Mapped[list["Conversation"]] = relationship(
+        "Conversation",
+        back_populates="task_type"
+    )
 
 
 # 前向引用
 from app.models.project_workspace import ProjectWorkspace
+from app.models.conversation import Conversation

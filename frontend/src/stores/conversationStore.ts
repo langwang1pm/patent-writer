@@ -22,7 +22,7 @@ interface ConversationState {
   fetchConversations: () => Promise<void>        // 首次加载（重置）
   loadMoreConversations: () => Promise<void>      // 滚动加载更多（追加）
   searchConversations: (query: string) => Promise<void>  // 搜索（后端全量）
-  createConversation: (title?: string, knowledgeConfigId?: string) => Promise<Conversation>
+  createConversation: (title?: string, knowledgeConfigId?: string, projectWorkspaceId?: string) => Promise<Conversation>
   setCurrentConversation: (id: string | null) => void
   fetchMessages: (conversationId: string) => Promise<void>
   sendMessage: (content: string, knowledgeConfigId?: string) => Promise<void>
@@ -98,10 +98,10 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     }
   },
 
-  createConversation: async (title?: string, knowledgeConfigId?: string) => {
+  createConversation: async (title?: string, knowledgeConfigId?: string, projectWorkspaceId?: string) => {
     set({ isLoading: true, error: null })
     try {
-      const conversation = await conversationApi.create(title, knowledgeConfigId)
+      const conversation = await conversationApi.create(title, knowledgeConfigId, projectWorkspaceId)
       set((state) => ({
         // 新建对话插入到列表最前面
         conversations: [conversation, ...state.conversations],

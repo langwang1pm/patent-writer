@@ -59,6 +59,7 @@ class ConversationBase(BaseModel):
 class ConversationCreate(ConversationBase):
     """创建对话"""
     knowledge_config_id: UUID | None = None
+    project_workspace_id: UUID | None = Field(None, description="所属项目空间ID")
 
 
 class ConversationUpdate(BaseModel):

@@ -23,16 +23,47 @@ class ConversationService:
         self,
         title: str = "新对话",
         knowledge_config_id: uuid.UUID | None = None,
+        project_workspace_id: uuid.UUID | None = None,
     ) -> Conversation:
-        """创建对话"""
+        """创建对话
+        
+        如果传入 project_workspace_id，自动从项目空间填充：
+        - enterprise_info_id（客户企业ID）
+        - task_type_id（任务类型ID）
+        """
+        # 从项目空间自动填充企业ID和任务类型ID
+        enterprise_info_id = None
+        task_type_id = None
+        
+        if project_workspace_id:
+            from sqlalchemy import select
+            from app.models.project_workspace import ProjectWorkspace
+            
+            result = await self.db.execute(
+                select(ProjectWorkspace).where(ProjectWorkspace.id == project_workspace_id)
+            )
+            workspace = result.scalar_one_or_none()
+            if workspace:
+                enterprise_info_id = workspace.enterprise_info_id
+                task_type_id = workspace.task_type_id
+        
         conversation = Conversation(
             title=title,
             knowledge_config_id=knowledge_config_id,
+            project_workspace_id=project_workspace_id,
+            enterprise_info_id=enterprise_info_id,
+            task_type_id=task_type_id,
         )
         self.db.add(conversation)
         await self.db.flush()
         await self.db.refresh(conversation)
-        logger.info("conversation_created", conversation_id=str(conversation.id))
+        logger.info(
+            "conversation_created",
+            conversation_id=str(conversation.id),
+            project_workspace_id=str(project_workspace_id) if project_workspace_id else None,
+            enterprise_info_id=str(enterprise_info_id) if enterprise_info_id else None,
+            task_type_id=str(task_type_id) if task_type_id else None,
+        )
         return conversation
 
     async def get_conversation(self, conversation_id: uuid.UUID) -> Conversation | None:

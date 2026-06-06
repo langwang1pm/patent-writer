@@ -29,6 +29,7 @@ from app.clients.dify_client import DifyClient, RetrieveResult
 from app.services.llm_svc import LLMService
 from app.services.document_svc import DocumentService
 from app.services.citation_svc import CitationService
+from app.services.conversation_svc import ConversationService
 from app.core.citation_parser import CitationParser
 
 import structlog
@@ -64,13 +65,12 @@ async def create_conversation(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """创建新对话"""
-    conversation = Conversation(
+    svc = ConversationService(db)
+    conversation = await svc.create_conversation(
         title=data.title,
         knowledge_config_id=data.knowledge_config_id,
+        project_workspace_id=data.project_workspace_id,
     )
-    db.add(conversation)
-    await db.flush()
-    await db.refresh(conversation)
     return conversation
 
 
@@ -80,8 +80,9 @@ async def list_conversations(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = Query(None, description="搜索标题"),
+    project_workspace_id: uuid.UUID | None = Query(None, description="项目空间 ID"),
 ):
-    """获取对话列表（无 N+1）"""
+    """获取对话列表(无 N+1)"""
     msg_count_sub = (
         select(Message.conversation_id, func.count(Message.id).label("msg_count"))
         .group_by(Message.conversation_id)
@@ -230,11 +231,11 @@ async def send_message(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
-    发送消息并调用 Dify Agent 生成回复（非流式）
+    发送消息并调用 Dify Agent 生成回复(非流式)
 
-    完整流程：
+    完整流程:
     1. 保存用户消息
-    2. 调用 Dify Agent（内部已集成知识库检索 RAG）
+    2. 调用 Dify Agent(内部已集成知识库检索 RAG)
     3. 保存 AI 回复
     4. 返回结果
     """
@@ -274,19 +275,19 @@ async def send_message(
     try:
         llm = _get_llm_service()
 
-        # 检查是否有已存的 Dify conversation_id（存在 message metadata 中）
-        # 简化实现：每次都作为新对话，后续可扩展为多轮
+        # 检查是否有已存的 Dify conversation_id(存在 message metadata 中)
+        # 简化实现:每次都作为新对话,后续可扩展为多轮
         answer, dify_conv_id, citations_chunks = await llm.generate_sync(
             user_message=data.content,
             task_type="技术交底书",
             conversation_id=None,
         )
 
-        ai_content = answer or "（AI 未返回内容，请检查 Dify 服务配置）"
+        ai_content = answer or "(AI 未返回内容,请检查 Dify 服务配置)"
 
     except Exception as e:
         logger.error("dify_call_failed", error=str(e), conversation_id=str(conversation_id))
-        ai_content = f"⚠️ 调用 AI 服务失败：{str(e)}\n\n请检查 Dify 服务是否正常运行，或稍后重试。"
+        ai_content = f"⚠️ 调用 AI 服务失败:{str(e)}\n\n请检查 Dify 服务是否正常运行,或稍后重试。"
 
     # 创建 AI 回复 + Document 实体
     auto_title = data.content[:30].replace('\n', ' ').strip() or "AI 回复"
@@ -327,14 +328,14 @@ async def stream_message(
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
     """
-    SSE 流式生成回复 — 调用 Dify Agent 流式 API，并持久化消息到数据库
-    
-    完整流程：
+    SSE 流式生成回复 - 调用 Dify Agent 流式 API,并持久化消息到数据库
+
+    完整流程:
     1. 验证对话存在
     2. 保存用户消息到数据库
-    3. 流式调用 Dify，实时返回内容片段
-    4. 流式结束后，保存 AI 回复到数据库
-    5. 返回 done 事件，包含消息 ID
+    3. 流式调用 Dify,实时返回内容片段
+    4. 流式结束后,保存 AI 回复到数据库
+    5. 返回 done 事件,包含消息 ID
     """
     from fastapi.responses import StreamingResponse
 
@@ -360,7 +361,7 @@ async def stream_message(
     await db.refresh(user_message)
     user_message_id = user_message.id
 
-    # 更新对话标题（首条用户消息时）
+    # 更新对话标题(首条用户消息时)
     if conversation.title == '新对话':
         count_result = await db.execute(
             select(func.count(Message.id)).where(
@@ -383,14 +384,14 @@ async def stream_message(
     await db.flush()
 
     async def event_generator():
-        # 发送开始事件（包含 user_message_id）
+        # 发送开始事件(包含 user_message_id)
         yield f"event: message_start\ndata: {{\"conversation_id\": \"{conversation_id}\", \"user_message_id\": \"{user_message_id}\"}}\n\n"
 
         full_answer = []
         has_error = False
         ai_message_id = None
-        ai_message = None  # 闭包外初始化，避免 done 事件中引用未定义变量
-        dify_message_id = None  # Dify 返回的 message_id，用于后续补拉检索结果
+        ai_message = None  # 闭包外初始化,避免 done 事件中引用未定义变量
+        dify_message_id = None  # Dify 返回的 message_id,用于后续补拉检索结果
 
         try:
             async for event_type, delta, extra_data in dify.chat_messages_stream(
@@ -418,9 +419,9 @@ async def stream_message(
 
             if not has_error:
                 # ── 2. 保存 AI 回复 + 创建 Document 实体 ──
-                ai_content = "".join(full_answer) or "（AI 未返回内容，请检查 Dify 服务配置）"
+                ai_content = "".join(full_answer) or "(AI 未返回内容,请检查 Dify 服务配置)"
 
-                # 创建 Document 实体（持久化附件，支持后续编辑/AI修改）
+                # 创建 Document 实体(持久化附件,支持后续编辑/AI修改)
                 auto_title = content[:30].replace('\n', ' ').strip() or "AI 回复"
                 document = Document(
                     conversation_id=conversation_id,
@@ -433,7 +434,7 @@ async def stream_message(
                 await db.refresh(document)
                 document_id = document.id
 
-                # 创建 AI 回复 Message，关联 document_id
+                # 创建 AI 回复 Message,关联 document_id
                 ai_message = Message(
                     conversation_id=conversation_id,
                     role="assistant",
@@ -519,8 +520,8 @@ async def stream_message(
             yield f"event: error\ndata: {{\"message\": {json.dumps(f'流式生成异常: {str(e)}', ensure_ascii=False)}}}\n\n"
             has_error = True
 
-        # 发送 done 事件（包含 message IDs + document_id + docx 导出链接）
-        # 使用 documents API 的导出路径（基于 Document 实体，非 Message）
+        # 发送 done 事件(包含 message IDs + document_id + docx 导出链接)
+        # 使用 documents API 的导出路径(基于 Document 实体,非 Message)
         _doc_id = ai_message.document_id if ai_message else None
         docx_url = f"/api/v1/documents/{_doc_id}/export-docx" if _doc_id else None
         done_data = {
@@ -553,7 +554,7 @@ async def export_message_as_docx(
 ):
     """将 AI 回复消息导出为 .docx 文件
 
-    从 Message.content（Markdown 格式）生成格式化的 Word 文档。
+    从 Message.content(Markdown 格式)生成格式化的 Word 文档。
     """
     from fastapi.responses import StreamingResponse
     import io
@@ -577,7 +578,7 @@ async def export_message_as_docx(
         title="AI 回复",
     )
 
-    # 生成文件名（取对话标题前 30 字符）
+    # 生成文件名(取对话标题前 30 字符)
     result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
     conv = result.scalar_one_or_none()
     safe_title = (conv.title[:30] if conv else "document").replace("/", "-").replace("\\", "-")
@@ -585,7 +586,7 @@ async def export_message_as_docx(
 
     import urllib.parse
 
-    # 中文文件名需要 URL 编码（RFC 5987）
+    # 中文文件名需要 URL 编码(RFC 5987)
     encoded_filename = urllib.parse.quote(filename)
     logger.info(
         "message_exported_as_docx",

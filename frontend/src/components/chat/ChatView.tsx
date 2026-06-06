@@ -104,7 +104,7 @@ export default function ChatView() {
 
   const handleQuickCreate = async () => {
     try {
-      const conversation = await createConversation()
+      const conversation = await createConversation(undefined, undefined, projectId)
       if (projectId) {
         navigate(`/project/${projectId}/chat/${conversation.id}`)
       }

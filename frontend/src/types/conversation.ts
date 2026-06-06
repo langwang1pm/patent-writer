@@ -2,6 +2,9 @@ export interface Conversation {
   id: string
   title: string
   knowledge_config_id: string | null
+  project_workspace_id: string | null
+  enterprise_info_id: string | null
+  task_type_id: string | null
   created_at: string
   updated_at: string
   messages: Message[]
