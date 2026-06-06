@@ -9,6 +9,8 @@ import * as taskTypeApi from "../services/taskTypeApi";
 interface ProjectWorkspaceStore {
   // 项目空间列表
   projectWorkspaces: ProjectWorkspaceWithRelations[];
+  // 当前选中的项目空间 ID（null = 全部/未选择）
+  currentProjectWorkspaceId: string | null;
   loading: boolean;
   error: string | null;
   
@@ -21,6 +23,8 @@ interface ProjectWorkspaceStore {
   modalOpen: boolean;
   editingProject: ProjectWorkspaceWithRelations | null; // null = 创建模式, non-null = 编辑模式
   
+  // 设置当前项目空间
+  setCurrentProjectWorkspace: (id: string | null) => void;
   // 加载项目空间列表
   fetchProjectWorkspaces: () => Promise<void>;
   // 加载企业信息列表
@@ -43,12 +47,17 @@ interface ProjectWorkspaceStore {
 
 export const useProjectWorkspaceStore = create<ProjectWorkspaceStore>((set, get) => ({
   projectWorkspaces: [],
+  currentProjectWorkspaceId: null,
   loading: false,
   error: null,
   enterpriseInfos: [],
   taskTypes: [],
   modalOpen: false,
   editingProject: null,
+  
+  setCurrentProjectWorkspace: (id: string | null) => {
+    set({ currentProjectWorkspaceId: id });
+  },
   
   fetchProjectWorkspaces: async () => {
     set({ loading: true, error: null });

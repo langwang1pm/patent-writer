@@ -111,6 +111,11 @@ async def list_conversations(
         query = query.where(Conversation.title.ilike(f"%{search}%"))
         count_query = count_query.where(Conversation.title.ilike(f"%{search}%"))
 
+    # 按项目空间过滤（核心修复：只查询指定项目空间的对话）
+    if project_workspace_id:
+        query = query.where(Conversation.project_workspace_id == project_workspace_id)
+        count_query = count_query.where(Conversation.project_workspace_id == project_workspace_id)
+
     count_result = await db.execute(count_query)
     total = count_result.scalar() or 0
 

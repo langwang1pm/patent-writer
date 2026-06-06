@@ -5,11 +5,18 @@ import { format, toZonedTime } from 'date-fns-tz'
 import { zhCN } from 'date-fns/locale'
 import { cn } from '@/utils/cn'
 import { useConversationStore } from '@/stores/conversationStore'
+import { useProjectWorkspaceStore } from '@/stores/projectWorkspaceStore'
 
 export default function Sidebar() {
   const navigate = useNavigate()
   const params = useParams<{ projectId: string; conversationId: string }>()
   const { projectId } = params
+
+  // 同步 URL 中的 projectId 到 projectWorkspaceStore
+  useEffect(() => {
+    useProjectWorkspaceStore.getState().setCurrentProjectWorkspace(projectId ?? null)
+  }, [projectId])
+
   const {
     conversations,
     fetchConversations,

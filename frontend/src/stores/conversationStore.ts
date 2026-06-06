@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Conversation, Message } from '@/types/conversation'
 import { conversationApi } from '@/services/conversationApi'
+import { useProjectWorkspaceStore } from './projectWorkspaceStore'
 
 /** 流式输出的阶段 */
 export type StreamPhase = 'idle' | 'connecting' | 'thinking' | 'generating' | 'done'
@@ -46,9 +47,10 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
   // 首次加载（重置列表）
   fetchConversations: async () => {
+    const currentProjectWorkspaceId = useProjectWorkspaceStore.getState().currentProjectWorkspaceId
     set({ isLoading: true, error: null, currentPage: 1, hasMore: true, total: 0 })
     try {
-      const response = await conversationApi.list({ page: 1, page_size: 20 })
+      const response = await conversationApi.list({ page: 1, page_size: 20, project_workspace_id: currentProjectWorkspaceId ?? undefined })
       set({
         conversations: response.items,
         total: response.total,
@@ -66,10 +68,11 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const { isLoadingMore, hasMore, currentPage, conversations } = get()
     if (isLoadingMore || !hasMore) return
 
+    const currentProjectWorkspaceId = useProjectWorkspaceStore.getState().currentProjectWorkspaceId
     set({ isLoadingMore: true, error: null })
     try {
       const nextPage = currentPage + 1
-      const response = await conversationApi.list({ page: nextPage, page_size: 10 })
+      const response = await conversationApi.list({ page: nextPage, page_size: 10, project_workspace_id: currentProjectWorkspaceId ?? undefined })
       set({
         conversations: [...conversations, ...response.items],
         isLoadingMore: false,
@@ -90,8 +93,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     }
     set({ isLoading: true, error: null, currentPage: 1, hasMore: false })
     try {
-      // 搜索范围为全部会话，page_size 设大一些（比如100）
-      const response = await conversationApi.list({ page: 1, page_size: 100, search: query })
+      // 搜索范围为当前项目空间内的会话
+      const currentProjectWorkspaceId = useProjectWorkspaceStore.getState().currentProjectWorkspaceId
+      const response = await conversationApi.list({ page: 1, page_size: 100, search: query, project_workspace_id: currentProjectWorkspaceId ?? undefined })
       set({ conversations: response.items, isLoading: false, hasMore: false })
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })

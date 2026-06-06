@@ -14,7 +14,7 @@ export const conversationApi = {
   },
 
   /** 获取对话列表 */
-  list: async (params?: { page?: number; page_size?: number; search?: string }): Promise<ConversationListResponse> => {
+  list: async (params?: { page?: number; page_size?: number; search?: string; project_workspace_id?: string }): Promise<ConversationListResponse> => {
     return api.get('conversations', { searchParams: params }).json()
   },
 
