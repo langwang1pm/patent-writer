@@ -40,10 +40,11 @@ def _console_url(config: KnowledgeConfig, path: str) -> str:
 async def list_knowledge_files(
     db: Annotated[AsyncSession, Depends(get_db)],
     knowledge_config_id: uuid.UUID | None = None,
+    enterprise_info_id: str | None = Query(None, description="按企业ID元数据过滤（UUID）"),
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量，最大 100"),
 ):
-    """获取知识库文件列表（支持分页）"""
+    """获取知识库文件列表（支持分页和 enterprise_info_id 元数据过滤）"""
     config = await _get_knowledge_config(db, knowledge_config_id)
 
     try:
@@ -84,6 +85,24 @@ async def list_knowledge_files(
                     item["size"] = file_records[doc_id].size
                 else:
                     item["size"] = None
+
+            # ========== 按 enterprise_info_id 元数据过滤 ==========
+            if enterprise_info_id:
+                filtered_items = []
+                for item in all_items:
+                    # doc_metadata 是数组
+                    doc_metadata = item.get("doc_metadata") or []
+                    # 找到 company 元数据
+                    company_value = None
+                    for meta in doc_metadata:
+                        if isinstance(meta, dict) and meta.get("name") == "company":
+                            company_value = meta.get("value")
+                            break
+                    # 检查是否匹配
+                    if company_value == enterprise_info_id:
+                        filtered_items.append(item)
+                all_items = filtered_items
+            # ==================================================
 
             total = len(all_items)
             # 计算分页
@@ -390,6 +409,7 @@ async def search_knowledge_files(
     q: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     knowledge_config_id: uuid.UUID | None = None,
+    enterprise_info_id: str | None = Query(None, description="按企业ID元数据过滤"),
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量，最大 100"),
 ):
@@ -397,7 +417,7 @@ async def search_knowledge_files(
     搜索知识库文件（支持分页）。
 
     注意：搜索范围是知识库中的全部内容，先从 Dify 获取所有文件，
-    然后按文件名关键词过滤，最后再分页返回结果。
+    然后按文件名关键词过滤，最后再按 enterprise_info_id 元数据过滤，返回结果。
     """
     config = await _get_knowledge_config(db, knowledge_config_id)
 
@@ -431,6 +451,13 @@ async def search_knowledge_files(
                 if q.lower() in item.get("name", "").lower()
             ]
 
+            # 按 enterprise_info_id 元数据过滤
+            if enterprise_info_id:
+                filtered_items = [
+                    item for item in filtered_items
+                    if _filter_by_enterprise_info_id(item, enterprise_info_id)
+                ]
+
             total = len(filtered_items)
             # 对搜索结果进行分页
             start = (page - 1) * page_size
@@ -447,6 +474,21 @@ async def search_knowledge_files(
 
     except aiohttp.ClientError as e:
         raise HTTPException(status_code=500, detail=f"连接 Dify 失败: {str(e)}")
+
+
+def _filter_by_enterprise_info_id(item: dict, enterprise_info_id: str) -> bool:
+    """
+    检查文档的元数据是否匹配指定的企业ID。
+    Dify 文档的元数据存储在 doc_metadata 字段中，格式为数组，
+    每个元素有 name、type、value 字段。
+    """
+    doc_metadata = item.get("doc_metadata", [])
+    if not isinstance(doc_metadata, list):
+        return False
+    for meta in doc_metadata:
+        if meta.get("name") == "company" and meta.get("value") == enterprise_info_id:
+            return True
+    return False
 
 
 async def _get_knowledge_config(

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useParams } from 'react-router-dom'
 import {
   Upload, Search, FileText, Trash2, Loader2,
   CheckCircle, Clock, AlertCircle, PauseCircle,
@@ -6,6 +7,7 @@ import {
 } from 'lucide-react'
 import { useKnowledgeStore } from '@/stores/knowledgeStore'
 import { knowledgeApi } from '@/services/knowledgeApi'
+import * as projectWorkspaceApi from '@/services/projectWorkspaceApi'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import Pagination from '@/components/ui/Pagination'
@@ -53,6 +55,9 @@ function openFilePreview(file: any) {
 }
 
 export default function KnowledgePage() {
+  const { projectId } = useParams<{ projectId: string }>()
+  const [enterpriseInfoId, setEnterpriseInfoId] = useState<string>('')
+  
   const {
     files, isLoading, isUploading, error, pagination,
     fetchFiles, uploadFile, deleteFile, searchFiles, clearError,
@@ -62,11 +67,32 @@ export default function KnowledgePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showUploadModal, setShowUploadModal] = useState(false)
 
-  // 初始加载（带分页参数）
+  // ========== 获取项目空间的 enterprise_info_id ==========
   useEffect(() => {
-    fetchFiles(pagination.page, pagination.pageSize)
+    if (!projectId) return
+    
+    const fetchProjectWorkspace = async () => {
+      try {
+        const projectWorkspace = await projectWorkspaceApi.getProjectWorkspace(projectId)
+        if (projectWorkspace?.enterprise_info_id) {
+          setEnterpriseInfoId(projectWorkspace.enterprise_info_id)
+        }
+      } catch (error) {
+        console.error('获取项目空间失败', error)
+      }
+    }
+    
+    fetchProjectWorkspace()
+  }, [projectId])
+  // ==================================================
+
+  // 初始加载（传入 enterprise_info_id）
+  useEffect(() => {
+    if (enterpriseInfoId) {
+      fetchFiles(pagination.page, pagination.pageSize, enterpriseInfoId)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [enterpriseInfoId])
   
   useEffect(() => { if (error) clearError() }, [error, clearError])
 
@@ -77,27 +103,27 @@ export default function KnowledgePage() {
   const handleSearch = useCallback((q: string) => {
     setSearchQuery(q)
     if (q.trim()) {
-      // 有搜索词时，从第一页开始搜索
-      searchFiles(q, 1, pagination.pageSize)
+      // 有搜索词时，从第一页开始搜索，并传入 enterprise_info_id
+      searchFiles(q, 1, pagination.pageSize, undefined, enterpriseInfoId || undefined)
     } else {
-      // 清空搜索时，回到当前分页状态
-      fetchFiles(pagination.page, pagination.pageSize)
+      // 清空搜索时，回到当前分页状态，并传入 enterprise_info_id
+      fetchFiles(pagination.page, pagination.pageSize, enterpriseInfoId || undefined)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchFiles, fetchFiles, pagination.pageSize])
+  }, [searchFiles, fetchFiles, pagination.pageSize, enterpriseInfoId])
 
   /**
    * 切换页码
    */
   const handlePageChange = useCallback((page: number) => {
     if (searchQuery.trim()) {
-      // 搜索状态下切换页码
-      searchFiles(searchQuery, page, pagination.pageSize)
+      // 搜索状态下切换页码，并传入 enterprise_info_id
+      searchFiles(searchQuery, page, pagination.pageSize, undefined, enterpriseInfoId || undefined)
     } else {
-      // 普通列表切换页码
-      fetchFiles(page, pagination.pageSize)
+      // 普通列表切换页码，并传入 enterprise_info_id
+      fetchFiles(page, pagination.pageSize, enterpriseInfoId || undefined)
     }
-  }, [searchQuery, searchFiles, fetchFiles, pagination.pageSize])
+  }, [searchQuery, searchFiles, fetchFiles, pagination.pageSize, enterpriseInfoId])
 
   /**
    * 切换每页数量
@@ -105,11 +131,11 @@ export default function KnowledgePage() {
   const handlePageSizeChange = useCallback((newPageSize: number) => {
     setPageSize(newPageSize)
     if (searchQuery.trim()) {
-      searchFiles(searchQuery, 1, newPageSize)
+      searchFiles(searchQuery, 1, newPageSize, undefined, enterpriseInfoId || undefined)
     } else {
-      fetchFiles(1, newPageSize)
+      fetchFiles(1, newPageSize, enterpriseInfoId || undefined)
     }
-  }, [searchQuery, searchFiles, fetchFiles, setPageSize])
+  }, [searchQuery, searchFiles, fetchFiles, setPageSize, enterpriseInfoId])
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files
@@ -117,11 +143,11 @@ export default function KnowledgePage() {
     try {
       for (const f of Array.from(list)) await uploadFile(f)
       setShowUploadModal(false)
-      // 上传完成后刷新当前页
+      // 上传完成后刷新当前页，并传入 enterprise_info_id
       if (searchQuery.trim()) {
-        searchFiles(searchQuery, pagination.page, pagination.pageSize)
+        searchFiles(searchQuery, pagination.page, pagination.pageSize, undefined, enterpriseInfoId || undefined)
       } else {
-        fetchFiles(pagination.page, pagination.pageSize)
+        fetchFiles(pagination.page, pagination.pageSize, enterpriseInfoId || undefined)
       }
     } catch { /* store 已处理 error */ }
     e.target.value = ''
@@ -131,11 +157,11 @@ export default function KnowledgePage() {
     if (!confirm(`确定删除「${name}」吗？`)) return
     try { 
       await deleteFile(fileId)
-      // 删除后自动刷新当前页（store 内部会处理页码调整）
+      // 删除后自动刷新当前页（store 内部会处理页码调整），并传入 enterprise_info_id
       if (searchQuery.trim()) {
-        searchFiles(searchQuery, pagination.page, pagination.pageSize)
+        searchFiles(searchQuery, pagination.page, pagination.pageSize, undefined, enterpriseInfoId || undefined)
       } else {
-        fetchFiles(pagination.page, pagination.pageSize)
+        fetchFiles(pagination.page, pagination.pageSize, enterpriseInfoId || undefined)
       }
     } catch {}
   }

@@ -23,10 +23,10 @@ export const useKnowledgeStore = create<KnowledgeState>()(
       totalPages: 0,
     },
 
-    fetchFiles: async (page: number = DEFAULT_PAGE, pageSize: number = DEFAULT_PAGE_SIZE) => {
+    fetchFiles: async (page: number = DEFAULT_PAGE, pageSize: number = DEFAULT_PAGE_SIZE, enterpriseInfoId?: string) => {
       set({ isLoading: true, error: null })
       try {
-        const data = await knowledgeApi.listFiles(page, pageSize)
+        const data = await knowledgeApi.listFiles(page, pageSize, undefined, enterpriseInfoId)
         set({
           files: data.items || [],
           isLoading: false,
@@ -95,10 +95,10 @@ export const useKnowledgeStore = create<KnowledgeState>()(
       }
     },
 
-    searchFiles: async (query: string, page: number = DEFAULT_PAGE, pageSize: number = DEFAULT_PAGE_SIZE) => {
+    searchFiles: async (query: string, page: number = DEFAULT_PAGE, pageSize: number = DEFAULT_PAGE_SIZE, knowledgeConfigId?: string, enterpriseInfoId?: string) => {
       set({ isLoading: true, error: null })
       try {
-        const data = await knowledgeApi.searchFiles(query, page, pageSize)
+        const data = await knowledgeApi.searchFiles(query, page, pageSize, knowledgeConfigId, enterpriseInfoId)
         set({
           files: data.items || [],
           isLoading: false,

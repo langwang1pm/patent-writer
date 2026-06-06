@@ -48,18 +48,21 @@ export const knowledgeApi = {
   // ---- 知识库文件 -----------------------------------------------------------
 
   /**
-   * 获取文件列表（支持分页）
+   * 获取文件列表（支持分页和企业ID元数据过滤）
    * @param page 页码，从 1 开始
    * @param pageSize 每页数量
    * @param knowledgeConfigId 可选，不传则使用默认配置
+   * @param enterpriseInfoId 可选，按企业ID元数据过滤
    */
   listFiles: async (
     page: number = 1,
     pageSize: number = 10,
-    knowledgeConfigId?: string
+    knowledgeConfigId?: string,
+    enterpriseInfoId?: string
   ): Promise<PaginatedResponse<any>> => {
     const cfg: Record<string, any> = { page, page_size: pageSize }
     if (knowledgeConfigId) cfg.knowledge_config_id = knowledgeConfigId
+    if (enterpriseInfoId) cfg.enterprise_info_id = enterpriseInfoId
     return api.get('knowledge/files', { searchParams: cfg }).json()
   },
 
@@ -102,21 +105,24 @@ export const knowledgeApi = {
   },
 
   /**
-   * 搜索知识库文件（按文件名关键词，支持分页）
+   * 搜索知识库文件（按文件名关键词，支持分页和企业ID元数据过滤）
    * 搜索范围是知识库中的全部内容
    * @param query 搜索关键词
    * @param page 页码，从 1 开始
    * @param pageSize 每页数量
    * @param knowledgeConfigId 可选，不传则使用默认配置
+   * @param enterpriseInfoId 可选，按企业ID元数据过滤
    */
   searchFiles: async (
     query: string,
     page: number = 1,
     pageSize: number = 10,
-    knowledgeConfigId?: string
+    knowledgeConfigId?: string,
+    enterpriseInfoId?: string
   ): Promise<PaginatedResponse<any>> => {
     const cfg: Record<string, any> = { q: query, page, page_size: pageSize }
     if (knowledgeConfigId) cfg.knowledge_config_id = knowledgeConfigId
+    if (enterpriseInfoId) cfg.enterprise_info_id = enterpriseInfoId
     return api.get('knowledge/files/search', { searchParams: cfg }).json()
   },
 
