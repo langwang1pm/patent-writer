@@ -69,14 +69,24 @@ export const knowledgeApi = {
   /**
    * 上传文件到 Dify 知识库
    * 后端会同时保存到本地 uploads/knowledge_files 目录
+   * @param file 要上传的文件
+   * @param knowledgeConfigId 可选，知识库配置ID
+   * @param enterpriseInfoId 可选，企业ID，用于设置文档元数据
    */
-  uploadFile: async (file: File, knowledgeConfigId?: string): Promise<any> => {
+  uploadFile: async (file: File, knowledgeConfigId?: string, enterpriseInfoId?: string): Promise<any> => {
     const formData = new FormData()
     formData.append('file', file)
 
     let url = `${API_BASE}/knowledge/files/upload`
+    const params = new URLSearchParams()
     if (knowledgeConfigId) {
-      url += `?knowledge_config_id=${encodeURIComponent(knowledgeConfigId)}`
+      params.append('knowledge_config_id', knowledgeConfigId)
+    }
+    if (enterpriseInfoId) {
+      params.append('enterprise_info_id', enterpriseInfoId)
+    }
+    if (params.toString()) {
+      url += `?${params.toString()}`
     }
 
     const response = await fetch(url, { method: 'POST', body: formData })

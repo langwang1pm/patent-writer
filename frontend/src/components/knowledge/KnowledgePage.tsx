@@ -141,7 +141,7 @@ export default function KnowledgePage() {
     const list = e.target.files
     if (!list?.length) return
     try {
-      for (const f of Array.from(list)) await uploadFile(f)
+      for (const f of Array.from(list)) await uploadFile(f, enterpriseInfoId || undefined)
       setShowUploadModal(false)
       // 上传完成后刷新当前页，并传入 enterprise_info_id
       if (searchQuery.trim()) {

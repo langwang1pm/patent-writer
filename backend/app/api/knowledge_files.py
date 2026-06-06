@@ -5,7 +5,7 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,22 @@ from aiohttp import FormData
 from app.dependencies import get_db
 from app.models.knowledge_config import KnowledgeConfig
 from app.models.knowledge_file import KnowledgeFile
+
+
+def get_dify_knowledge_api_key() -> Optional[str]:
+    """获取 Dify 知识库 API Key（从环境变量读取）
+    
+    知识库操作（上传文档、添加元数据等）需要使用 Dataset API Key
+    """
+    return os.getenv("DIFY_KNOWLEDGE_API_KEY")
+
+
+def get_dify_app_api_key() -> Optional[str]:
+    """获取 Dify 应用 API Key（从环境变量读取）
+    
+    调用 Dify 应用（聊天、工作流等）需要使用 App API Key
+    """
+    return os.getenv("DIFY_API_KEY")
 
 
 # 本地文件存储目录
@@ -127,8 +143,9 @@ async def upload_knowledge_file(
     db: Annotated[AsyncSession, Depends(get_db)],
     file: UploadFile = File(...),
     knowledge_config_id: uuid.UUID | None = None,
+    enterprise_info_id: str | None = Query(None, description="企业ID，用于设置文档元数据"),
 ):
-    logger.info(f"程序走到该方法")
+    logger.info(f"程序走到该方法, enterprise_info_id={enterprise_info_id}")
     """上传文件到 Dify 知识库，并保存到本地"""
     config = await _get_knowledge_config(db, knowledge_config_id)
     raw_filename = file.filename or "upload"
@@ -219,7 +236,11 @@ async def upload_knowledge_file(
             )
             form_data.add_field("data", data_json)
 
-            headers = {"Authorization": f"Bearer {config.dify_api_key}"}
+            # 知识库操作需要使用 Dataset API Key
+            api_key = get_dify_knowledge_api_key() or config.dify_api_key
+            if not api_key:
+                raise Exception("未配置 Dify 知识库 API Key，请在 .env 中设置 DIFY_KNOWLEDGE_API_KEY")
+            headers = {"Authorization": f"Bearer {api_key}"}
 
             logger.info(f"准备上传到 Dify: URL={url}, indexing_technique={indexing_technique}, data={data_json}")
 
@@ -235,10 +256,28 @@ async def upload_knowledge_file(
                     )
                 dify_data = await response.json()
 
-        dify_doc = dify_data.get("document", {})
-        dify_doc_id = dify_doc.get("id")
-        if not dify_doc_id:
-            raise HTTPException(status_code=500, detail="Dify 未返回文档 ID")
+                # 先提取 dify_doc_id
+                dify_doc = dify_data.get("document", {})
+                dify_doc_id = dify_doc.get("id")
+                if not dify_doc_id:
+                    raise HTTPException(status_code=500, detail="Dify 未返回文档 ID")
+
+                # 上传成功后，如果有 enterprise_info_id，则添加元数据
+                logger.info(f"检查是否需要添加元数据: enterprise_info_id={enterprise_info_id}")
+                if enterprise_info_id:
+                    logger.info(f"开始为文档 {dify_doc_id} 添加元数据 company={enterprise_info_id}")
+                    try:
+                        await _add_document_metadata(
+                            session, config, dify_doc_id, enterprise_info_id
+                        )
+                        logger.info(f"✅ 成功为文档 {dify_doc_id} 添加元数据 company={enterprise_info_id}")
+                    except Exception as meta_e:
+                        # 元数据添加失败不中断主流程，只记录日志
+                        logger.error(f"❌ 为文档 {dify_doc_id} 添加元数据失败: {meta_e}")
+                else:
+                    logger.warning(f"⚠️ 未提供 enterprise_info_id，跳过元数据添加")
+
+        # 此时 dify_doc 和 dify_doc_id 已经在上面定义好了
 
         knowledge_file = KnowledgeFile(
             dify_document_id=dify_doc_id,
@@ -322,8 +361,13 @@ async def download_knowledge_file(
             timeout = aiohttp.ClientTimeout(total=300)  # 设置总超时为 300 秒 (5分钟)，给 Embedding 足够的时间
 
             async with aiohttp.ClientSession(timeout=timeout) as session:
+                # 知识库操作需要使用 Dataset API Key
+                api_key = get_dify_knowledge_api_key() or config.dify_api_key
+                if not api_key:
+                    raise Exception("未配置 Dify 知识库 API Key，请在 .env 中设置 DIFY_KNOWLEDGE_API_KEY")
+                
                 headers = {
-                    "Authorization": f"Bearer {config.dify_api_key}",
+                    "Authorization": f"Bearer {api_key}",
                 }
 
                 async with session.get(dify_url, headers=headers, allow_redirects=True) as response:
@@ -379,9 +423,14 @@ async def delete_knowledge_file(
     config = await _get_knowledge_config(db, knowledge_config_id)
 
     try:
+        # 知识库操作需要使用 Dataset API Key
+        api_key = get_dify_knowledge_api_key() or config.dify_api_key
+        if not api_key:
+            raise Exception("未配置 Dify 知识库 API Key，请在 .env 中设置 DIFY_KNOWLEDGE_API_KEY")
+        
         async with aiohttp.ClientSession() as session:
             url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/documents/{file_id}"
-            headers = {"Authorization": f"Bearer {config.dify_api_key}"}
+            headers = {"Authorization": f"Bearer {api_key}"}
 
             async with session.delete(url, headers=headers) as response:
                 if response.status not in (200, 204):
@@ -422,9 +471,14 @@ async def search_knowledge_files(
     config = await _get_knowledge_config(db, knowledge_config_id)
 
     try:
+        # 知识库操作需要使用 Dataset API Key
+        api_key = get_dify_knowledge_api_key() or config.dify_api_key
+        if not api_key:
+            raise Exception("未配置 Dify 知识库 API Key，请在 .env 中设置 DIFY_KNOWLEDGE_API_KEY")
+        
         async with aiohttp.ClientSession() as session:
             url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/documents"
-            headers = {"Authorization": f"Bearer {config.dify_api_key}"}
+            headers = {"Authorization": f"Bearer {api_key}"}
 
             # Dify API 默认 limit=20，需要循环获取全部数据
             all_items: list = []
@@ -489,6 +543,52 @@ def _filter_by_enterprise_info_id(item: dict, enterprise_info_id: str) -> bool:
         if meta.get("name") == "company" and meta.get("value") == enterprise_info_id:
             return True
     return False
+
+
+async def _add_document_metadata(
+    session: aiohttp.ClientSession,
+    config: KnowledgeConfig,
+    document_id: str,
+    enterprise_info_id: str,
+) -> None:
+    """
+    为 Dify 文档添加元数据
+    API 文档：POST /v1/datasets/{dataset_id}/documents/metadata
+    批量更新文档元数据
+    """
+    # 知识库操作需要使用 Dataset API Key
+    api_key = get_dify_knowledge_api_key() or config.dify_api_key
+    if not api_key:
+        raise Exception("未配置 Dify 知识库 API Key，请在 .env 中设置 DIFY_KNOWLEDGE_API_KEY")
+    
+    url = f"{config.dify_base_url}/v1/datasets/{config.knowledge_id}/documents/metadata"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "operation_data": {
+            "documents": [
+                {
+                    "document_id": document_id,
+                    "metadata": [
+                        {"name": "company", "value": enterprise_info_id}
+                    ]
+                }
+            ]
+        }
+    }
+    
+    # 脱敏打印 API Key（只显示前10个字符）
+    masked_key = api_key[:10] + "..." if len(api_key) > 10 else api_key
+    logger.info(f"准备添加元数据到 Dify: URL={url}, API_Key={masked_key}, payload={payload}")
+    
+    async with session.post(url, json=payload, headers=headers) as response:
+        response_text = await response.text()
+        logger.info(f"Dify 元数据 API 响应: status={response.status}, body={response_text}")
+        if response.status not in (200, 201):
+            raise Exception(f"Dify 元数据 API 失败: {response_text}")
+        logger.info(f"Dify 元数据添加成功: {response_text}")
 
 
 async def _get_knowledge_config(

@@ -46,10 +46,10 @@ export const useKnowledgeStore = create<KnowledgeState>()(
       }
     },
 
-    uploadFile: async (file: File) => {
+    uploadFile: async (file: File, enterpriseInfoId?: string) => {
       set({ isUploading: true, error: null })
       try {
-        await knowledgeApi.uploadFile(file)
+        await knowledgeApi.uploadFile(file, undefined, enterpriseInfoId)
         set({ isUploading: false })
       } catch (error) {
         console.error('上传文件失败:', error)
