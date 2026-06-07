@@ -158,6 +158,7 @@ class DifyClient:
         conversation_id: str | None = None,
         response_mode: str = "streaming",
         timeout: int = 120,
+        inputs: dict[str, str] | None = None,
     ) -> DifyMessage:
         """
         调用 Dify 对话型应用（Agent）API
@@ -168,6 +169,7 @@ class DifyClient:
             conversation_id: 对话 ID（续接会话）
             response_mode: blocking | streaming
             timeout: 超时秒数
+            inputs: Dify 应用变量（如 companyId, tasktypeId），默认 {}
 
         Returns:
             DifyMessage: 包含回答和引用的消息对象
@@ -179,7 +181,7 @@ class DifyClient:
         }
         payload: dict[str, Any] = {
             "query": query,
-            "inputs": {},  # Dify 要求：即使无输入变量也必须传空对象
+            "inputs": inputs or {},
             "response_mode": response_mode,
             "user": user_id,
         }
@@ -275,9 +277,17 @@ class DifyClient:
         user_id: str = "patent-writer",
         conversation_id: str | None = None,
         timeout: int = 120,
+        inputs: dict[str, str] | None = None,
     ) -> AsyncGenerator[tuple[str, str, dict], None]:
         """
         流式调用 Dify Agent，SSE 逐事件 yield
+
+        Args:
+            query: 用户消息
+            user_id: 用户标识
+            conversation_id: 对话 ID（续接会话）
+            timeout: 超时秒数
+            inputs: Dify 应用变量（如 companyId, tasktypeId），默认 {}
 
         Yields:
             (event_type, delta/answer, extra_data)
@@ -289,7 +299,7 @@ class DifyClient:
         }
         payload: dict[str, Any] = {
             "query": query,
-            "inputs": {},  # Dify 要求：即使无输入变量也必须传空对象
+            "inputs": inputs or {},
             "response_mode": "streaming",
             "user": user_id,
         }

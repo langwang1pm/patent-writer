@@ -388,6 +388,19 @@ async def stream_message(
     conversation.updated_at = now_cst()
     await db.flush()
 
+    # 构建 Dify 应用变量：从 Conversation 冗余字段传入 companyId / tasktypeId
+    dify_inputs: dict[str, str] = {}
+    if conversation.enterprise_info_id:
+        dify_inputs["companyId"] = str(conversation.enterprise_info_id)
+    if conversation.task_type_id:
+        dify_inputs["tasktypeId"] = str(conversation.task_type_id)
+    if dify_inputs:
+        logger.info(
+            "dify_inputs",
+            companyId=dify_inputs.get("companyId"),
+            tasktypeId=dify_inputs.get("tasktypeId"),
+        )
+
     async def event_generator():
         # 发送开始事件(包含 user_message_id)
         yield f"event: message_start\ndata: {{\"conversation_id\": \"{conversation_id}\", \"user_message_id\": \"{user_message_id}\"}}\n\n"
@@ -404,6 +417,7 @@ async def stream_message(
                 user_id=f"patent-writer-{conversation_id}",
                 conversation_id=None,
                 timeout=settings.dify_timeout_s * 40,
+                inputs=dify_inputs,
             ):
                 if event_type == "error":
                     error_msg = delta or "Dify 流式调用出错"
