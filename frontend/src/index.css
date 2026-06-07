@@ -68,6 +68,27 @@ html, body {
   transition: background-color 0.2s;
 }
 
+/* 强制 markdown-body 文字颜色为黑色（覆盖深色模式） */
+html body .markdown-body,
+html body .markdown-body *,
+html body .markdown-body p,
+html body .markdown-body li,
+html body .markdown-body td,
+html body .markdown-body th,
+html body .markdown-body h1,
+html body .markdown-body h2,
+html body .markdown-body h3,
+html body .markdown-body h4,
+html body .markdown-body h5,
+html body .markdown-body h6,
+html body .markdown-body span,
+html body .markdown-body div,
+html body .markdown-body strong,
+html body .markdown-body em,
+html body .markdown-body code {
+  color: black !important;
+}
+
 .citation-mark:hover {
   background-color: #dbeafe;
 }

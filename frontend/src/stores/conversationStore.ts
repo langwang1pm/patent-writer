@@ -184,8 +184,11 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       await new Promise<void>((resolve, reject) => {
         const eventSource = new EventSource(streamUrl)
 
-        let fullContent = ''
-        let isDone = false  // 标记是否已收到 done 事件
+        let fullContent = ''          // 完整内容（含标签）
+        let thinkingContent = ''       // 思考内容（不含标签）
+        let mainContent = ''          // 正文内容
+        let hasThinkingEnded = false  // 是否已检测到 <//think> 标签
+        let isDone = false            // 标记是否已收到 done 事件
 
         // ── message_start：连接确认 ──
         eventSource.addEventListener('message_start', (event: any) => {
@@ -205,8 +208,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           }
         })
 
-        // ── content_delta：收到第一个 token 后切换到 generating 阶段 ──
-        // 节流：避免每个 delta 都触发 React 重渲染导致 Markdown 叠加/蒙层
+        // ── content_delta：解析 think 标签，分离思考和正文 ──
+        // 节流：避免每个 delta 都触发 React 重渲染
         let lastRenderTime = 0
         let pendingRenderTimer: ReturnType<typeof setTimeout> | null = null
         const RENDER_INTERVAL_MS = 50  // 每 50ms 最多渲染一次（~20fps）
@@ -222,7 +225,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
             set((state) => ({
               streamPhase: 'generating',
               messages: state.messages.map((m) =>
-                m.id === aiMsgId ? { ...m, content: fullContent } : m
+                m.id === aiMsgId
+                  ? { ...m, content: mainContent, thinking_content: thinkingContent || null }
+                  : m
               ),
             }))
           }, delay)
@@ -234,12 +239,72 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
             const data = JSON.parse(event.data)
             const delta = data.delta || ''
             fullContent += delta
-            // [DEBUG] 记录 delta 长度，发布后可删除
-            if (delta.length > 0) {
-              console.log(`[SSE] content_delta received, delta_len=${delta.length}, total_len=${fullContent.length}, first_10=${delta.slice(0,10)}`)
+
+            // 解析 think 标签：<think>思考内容</think>
+            if (!hasThinkingEnded) {
+              // 尚未检测到 <//think>，检查当前 fullContent 是否包含
+              const thinkEndMatch = fullContent.match(/<\/think>/i)
+              if (thinkEndMatch) {
+                // 检测到 <//think/>，截取思考内容和正文
+                const endPos = thinkEndMatch.index!
+                let lockedThinking = fullContent.substring(0, endPos).trim()
+                // 去掉开头的 <think> 或 <think/> 标签
+                lockedThinking = lockedThinking.replace(/^<think\s*\/?>\s*/i, '').trim()
+                thinkingContent = lockedThinking
+
+                // <//think/> 之后的内容作为正文
+                const remainingContent = fullContent.substring(endPos + thinkEndMatch[0].length).trim()
+                mainContent = remainingContent
+
+                hasThinkingEnded = true
+
+                // 立即更新消息（思考内容 + 正文开头）
+                lastRenderTime = Date.now()
+                set((state) => ({
+                  streamPhase: 'generating',
+                  messages: state.messages.map((m) =>
+                    m.id === aiMsgId
+                      ? { ...m, content: remainingContent, thinking_content: lockedThinking || null }
+                      : m
+                  ),
+                }))
+              } else {
+                // 还在思考阶段，检查是否有 <think> 开头
+                if (fullContent.includes('<think>') || fullContent.match(/<think\s*\/?>/i)) {
+                  // 有思考标签，提取思考内容（不含标签）
+                  let displayThinking = fullContent.replace(/^<think\s*\/?>\s*/i, '').trim()
+                  // 实时更新思考内容（还在收集中，不含正文）
+                  set((state) => ({
+                    messages: state.messages.map((m) =>
+                      m.id === aiMsgId
+                        ? { ...m, content: '', thinking_content: displayThinking }
+                        : m
+                    ),
+                  }))
+                } else {
+                  // 没有思考标签，直接作为正文
+                  hasThinkingEnded = true
+                  mainContent = fullContent
+                  set((state) => ({
+                    streamPhase: 'generating',
+                    messages: state.messages.map((m) =>
+                      m.id === aiMsgId
+                        ? { ...m, content: fullContent, thinking_content: null }
+                        : m
+                    ),
+                  }))
+                }
+              }
+            } else {
+              // 思考已结束，正文流式输出
+              mainContent = fullContent.replace(/<\/think>.*$/is, '').trim()
+              // 去掉思考部分，只保留正文
+              const thinkEndMatch = fullContent.match(/<\/think>/i)
+              if (thinkEndMatch) {
+                mainContent = fullContent.substring(thinkEndMatch.index! + thinkEndMatch[0].length).trim()
+              }
+              scheduleRender()
             }
-            // 节流渲染，避免高频更新导致 Markdown 叠加蒙层
-            scheduleRender()
           } catch (e) {
             console.error('解析 content_delta 失败:', e)
           }
@@ -255,7 +320,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
             const errorMsg = data.message || '流式生成出错'
             console.log('[SSE] error event:', errorMsg)
 
-            if (fullContent.length > 0) {
+            if (mainContent.length > 0) {
               console.log('[SSE] 已有内容，忽略 error 事件')
               return
             }
@@ -271,7 +336,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
               error: errorMsg,
             }))
           } catch {
-            if (fullContent.length > 0) {
+            if (mainContent.length > 0) {
               console.log('[SSE] error 事件解析失败，但已有内容，忽略')
               return
             }
@@ -299,17 +364,28 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
             const docxUrl = data.docx_url || null
             console.log('[SSE] done:', data, '| aiMessageId:', aiMessageId, '| documentId:', documentId, '| docxUrl:', docxUrl)
 
+            // 最终处理：确保正文内容正确（去掉思考标签部分）
+            let finalContent = mainContent
+            const thinkEndMatch = fullContent.match(/<\/think>/i)
+            if (thinkEndMatch) {
+              finalContent = fullContent.substring(thinkEndMatch.index! + thinkEndMatch[0].length).trim()
+            }
+
             if (aiMessageId) {
               set((state) => ({
                 messages: state.messages.map((m) =>
-                  m.id === aiMsgId ? { ...m, id: aiMessageId, document_id: documentId, docx_url: docxUrl } : m
+                  m.id === aiMsgId
+                    ? { ...m, id: aiMessageId, content: finalContent, document_id: documentId, docx_url: docxUrl, thinking_content: thinkingContent || null }
+                    : m
                 ),
               }))
             } else if (docxUrl) {
               // 没有 aiMessageId 时也要把 docx_url 和 document_id 挂到占位消息上
               set((state) => ({
                 messages: state.messages.map((m) =>
-                  m.id === aiMsgId ? { ...m, document_id: documentId, docx_url: docxUrl } : m
+                  m.id === aiMsgId
+                    ? { ...m, document_id: documentId, docx_url: docxUrl, thinking_content: thinkingContent || null }
+                    : m
                 ),
               }))
             }
@@ -348,7 +424,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
             set((state) => ({
               messages: state.messages.map((m) =>
                 m.id === aiMsgId
-                  ? { ...m, content: fullContent || '⚠️ 连接中断，请重试' }
+                  ? { ...m, content: mainContent || '⚠️ 连接中断，请重试' }
                   : m
               ),
               isStreaming: false,

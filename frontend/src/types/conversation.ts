@@ -24,6 +24,8 @@ export interface Message {
   document?: ChatDocument | null
   /** 流式结束后导出的 docx 下载地址（相对路径） */
   docx_url?: string | null
+  /** 思考/推理内容（<think>...</think> 之间的内容） */
+  thinking_content?: string | null
 }
 
 export interface ChatDocument {

@@ -1,45 +1,13 @@
-import { useState, useRef, useEffect } from 'react'
+﻿import { useState, useRef, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Send, FileText, Plus, Search, Sparkles, BookOpen } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import remarkBreaks from 'remark-breaks'
+import { Send, FileText, Plus, BookOpen } from 'lucide-react'
 import { useConversationStore, type StreamPhase } from '@/stores/conversationStore'
 import { useKnowledgeStore } from '@/stores/knowledgeStore'
 import { cn } from '@/utils/cn'
-import FileAttachment from '@/components/chat/FileAttachment'
 import { useChatCitations } from '@/hooks/useChatCitations'
 import CitationPanel from '@/components/layout/CitationPanel'
 import { useCitationStore } from '@/stores/citationStore'
-
-
-/** 流式阶段对应的提示信息 */
-const STREAM_PHASE_CONFIG: Record<
-  Exclude<StreamPhase, 'idle' | 'done'>,
-  { icon: React.ReactNode; label: string; sublabel: string }
-> = {
-  connecting: {
-    icon: <Search className="w-4 h-4 animate-pulse" />,
-    label: '正在连接服务',
-    sublabel: '正在建立连接...',
-  },
-  thinking: {
-    icon: <Sparkles className="w-4 h-4 animate-pulse" />,
-    label: 'AI 正在思考',
-    sublabel: '正在检索知识库并分析需求...',
-  },
-  generating: {
-    icon: (
-      <div className="flex gap-1">
-        <div className="w-1.5 h-1.5 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-        <div className="w-1.5 h-1.5 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-        <div className="w-1.5 h-1.5 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-      </div>
-    ),
-    label: '正在生成内容',
-    sublabel: '',
-  },
-}
+import ContentCard from '@/components/chat/ContentCard'
 
 export default function ChatView() {
   const navigate = useNavigate()
@@ -55,13 +23,12 @@ export default function ChatView() {
   } = useConversationStore()
   const currentConfigId = useKnowledgeStore((s) => (s as any).currentConfigId ?? null)
   const [inputValue, setInputValue] = useState('')
-  const [showCitationPanel, setShowCitationPanel] = useState(true) // 默认显示引用面板
+  const [showCitationPanel, setShowCitationPanel] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const citations = useCitationStore((s) => s.citations)
   const citationCount = citations.length
 
-  // 处理引用标注点击事件（事件委托）
   const handleCitationClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement
     if (target.classList.contains('citation-mark')) {
@@ -70,31 +37,27 @@ export default function ChatView() {
       if (match) {
         const sourceName = match[1]
         const citationStore = useCitationStore.getState()
-        const citation = citationStore.citations.find(c => 
+        const citation = citationStore.citations.find(c =>
           c.source_name.includes(sourceName.split(' - ')[0])
         )
         if (citation) {
           citationStore.setActiveCitation(citation.id)
-          // 这里可以添加滚动到对应卡片的逻辑
         }
       }
     }
   }
 
   useChatCitations()
-  // 监听路由变化
   useEffect(() => {
     if (conversationId) {
       setCurrentConversation(conversationId)
     }
   }, [conversationId, setCurrentConversation])
 
-  // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // 自动调整输入框高度
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
@@ -127,7 +90,6 @@ export default function ChatView() {
     }
   }
 
-  // 空状态
   if (!currentConversationId) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center px-4">
@@ -149,23 +111,13 @@ export default function ChatView() {
     )
   }
 
-  // 获取当前阶段的提示配置
-  const phaseConfig =
-    isStreaming && streamPhase !== 'idle' && streamPhase !== 'done'
-      ? STREAM_PHASE_CONFIG[streamPhase]
-      : null
-
   return (
     <div className="h-full flex">
-      {/* 左侧：对话区域 */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* 顶部工具栏 - 始终显示 */}
         <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-gray-500" />
-            <span className="text-sm text-gray-600">
-              对话窗口
-            </span>
+            <span className="text-sm text-gray-600">对话窗口</span>
           </div>
           <div className="flex items-center gap-3">
             {citationCount > 0 && (
@@ -184,7 +136,7 @@ export default function ChatView() {
             </button>
           </div>
         </div>
-        {/* 消息列表 */}
+
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
           {messages.map((message) => (
             <div
@@ -202,48 +154,58 @@ export default function ChatView() {
                     : 'bg-gray-100 text-gray-800'
                 )}
               >
-                {/* 用户消息 */}
                 {message.role === 'user' && (
                   <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                 )}
 
-                {/* AI 消息 — Markdown 渲染 */}
+                {/* ✅ 正确：role === 'assistant' */}
                 {message.role === 'assistant' && (
-                  <div 
-                    className="space-y-4 prose prose-sm max-w-none markdown-body"
-                    onClick={handleCitationClick}
-                  >
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkBreaks]}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
-
-                    {/* ── docx 附件卡片 ── */}
-                    {message.docx_url && (
-                      <FileAttachment
-                        fileName={`文档-${message.id.slice(0, 8)}.docx`}
-                        fileUrl={message.docx_url}
-                        documentId={message.document_id}
-                      />
-                    )}
-                  </div>
+                  <ContentCard
+                    content={message.content}
+                    documentId={message.document_id}
+                    docxUrl={message.docx_url || null}
+                    isStreaming={false}
+                    thinkingContent={message.thinking_content}
+                    onCitationClick={handleCitationClick}
+                  />
                 )}
               </div>
             </div>
           ))}
         </div>
 
-        {/* 流式加载指示器 — 根据阶段显示不同内容 */}
-        {isStreaming && phaseConfig && (
+        {/* 流式阶段提示 */}
+        {isStreaming && streamPhase !== 'idle' && streamPhase !== 'done' && (
           <div className="flex justify-start px-4">
             <div className="bg-gray-100 rounded-2xl px-4 py-3">
               <div className="flex items-center gap-2.5 text-sm text-gray-500">
-                <span className="text-primary-500 flex-shrink-0">{phaseConfig.icon}</span>
+                <span className="text-primary-500 flex-shrink-0">
+                  {streamPhase === 'connecting' && (
+                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  )}
+                  {streamPhase === 'thinking' && (
+                    <div className="flex gap-1">
+                      <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  )}
+                  {streamPhase === 'generating' && (
+                    <div className="flex gap-1">
+                      <div className="w-1.5 h-1.5 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1.5 h-1.5 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  )}
+                </span>
                 <div className="flex flex-col">
-                  <span className="font-medium text-gray-600">{phaseConfig.label}</span>
-                  {phaseConfig.sublabel && (
-                    <span className="text-xs text-gray-400 -mt-0.5">{phaseConfig.sublabel}</span>
+                  <span className="font-medium text-gray-600">
+                    {streamPhase === 'connecting' && '正在连接服务'}
+                    {streamPhase === 'thinking' && 'AI 正在思考'}
+                    {streamPhase === 'generating' && '正在生成内容'}
+                  </span>
+                  {streamPhase === 'thinking' && (
+                    <span className="text-xs text-gray-400 -mt-0.5">正在检索知识库并分析需求...</span>
                   )}
                 </div>
               </div>
@@ -253,7 +215,6 @@ export default function ChatView() {
 
         <div ref={messagesEndRef} />
 
-        {/* 输入框 — 放在左侧对话区域内部，确保在底部 */}
         <div className="border-t border-gray-200 p-4 bg-white shrink-0">
           <div className="mx-4">
             <div
@@ -302,7 +263,6 @@ export default function ChatView() {
         </div>
       </div>
 
-      {/* 右侧：引用面板 */}
       {showCitationPanel && <CitationPanel isOpen={showCitationPanel} onClose={() => setShowCitationPanel(false)} />}
     </div>
   )

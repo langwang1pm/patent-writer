@@ -440,13 +440,24 @@ async def stream_message(
                 # ── 2. 保存 AI 回复 + 创建 Document 实体 ──
                 ai_content = "".join(full_answer) or "(AI 未返回内容,请检查 Dify 服务配置)"
 
+                # 提取 <think> 思考内容
+                import re
+                think_pattern = r'<think>(.*?)</think>(.*)'
+                match = re.search(think_pattern, ai_content, re.DOTALL)
+                if match:
+                    thinking_content = match.group(1).strip()
+                    clean_content = match.group(2).strip()
+                else:
+                    thinking_content = None
+                    clean_content = ai_content
+
                 # 创建 Document 实体(持久化附件,支持后续编辑/AI修改)
                 auto_title = content[:30].replace('\n', ' ').strip() or "AI 回复"
                 document = Document(
                     conversation_id=conversation_id,
                     title=auto_title,
-                    content_html=ai_content,  # Markdown 格式暂存 html 字段
-                    content_markdown=ai_content,
+                    content_html=clean_content,  # Markdown 格式暂存 html 字段
+                    content_markdown=clean_content,
                 )
                 db.add(document)
                 await db.flush()
@@ -457,8 +468,9 @@ async def stream_message(
                 ai_message = Message(
                     conversation_id=conversation_id,
                     role="assistant",
-                    content=ai_content,
+                    content=clean_content,
                     document_id=document_id,
+                    thinking_content=thinking_content,
                 )
                 db.add(ai_message)
                 await db.flush()

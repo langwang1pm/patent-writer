@@ -123,6 +123,11 @@ class Message(Base):
         ForeignKey("patentwriter.documents.id"),
         nullable=True
     )
+    thinking_content: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="思考/推理内容（<think>...</think>之间的内容）"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

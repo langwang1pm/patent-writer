@@ -25,6 +25,7 @@ class MessageResponse(MessageBase):
     conversation_id: UUID
     document_id: UUID | None = None
     docx_url: str | None = None
+    thinking_content: str | None = None
     created_at: CstDatetime
 
     model_config = {"from_attributes": True}
@@ -42,6 +43,7 @@ class MessageResponse(MessageBase):
             content=msg.content,
             document_id=msg.document_id,
             docx_url=docx_url,
+            thinking_content=msg.thinking_content,
             created_at=msg.created_at,
         )
 

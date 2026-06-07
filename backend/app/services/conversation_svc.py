@@ -131,6 +131,7 @@ class ConversationService:
         role: str,
         content: str,
         document_id: uuid.UUID | None = None,
+        thinking_content: str | None = None,
     ) -> Message:
         """添加消息，首条用户消息自动生成对话标题"""
         message = Message(
@@ -138,6 +139,7 @@ class ConversationService:
             role=role,
             content=content,
             document_id=document_id,
+            thinking_content=thinking_content,
         )
         self.db.add(message)
         await self.db.flush()
