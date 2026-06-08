@@ -11,7 +11,8 @@ COPY package.json package-lock.json* ./
 RUN npm install  
 
 # Receive build arg from docker-compose.yml   build-arg   
-ARG VITE_API_BASE_URL  
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 COPY . .
 RUN echo "Starting build..." && \
