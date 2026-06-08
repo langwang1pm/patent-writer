@@ -72,7 +72,7 @@ app.include_router(citations.router, prefix="/api/v1", tags=["引用管理"])
 app.include_router(knowledge.router, prefix="/api/v1", tags=["知识库配置"])
 app.include_router(knowledge_files.router, prefix="/api/v1", tags=["知识库文件管理"])
 app.include_router(onlyoffice.router, prefix="/api/v1", tags=["OnlyOffice 文档预览"])
-app.include_router(project_workspaces.router, prefix="/api/v1/project-workspaces", tags=["项目空间管理"])
+app.include_router(project_workspaces.router, prefix="/api/v1", tags=["项目空间管理"])
 app.include_router(task_types.router, prefix="/api/v1/task-types", tags=["任务类型管理"])
 app.include_router(enterprise_infos.router, prefix="/api/v1/enterprise-infos", tags=["企业信息管理"]) 
 

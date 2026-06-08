@@ -13,7 +13,7 @@ from app.services.project_workspace_svc import ProjectWorkspaceService
 router = APIRouter()
 
 
-@router.get("", response_model=list[ProjectWorkspaceWithRelations], tags=["项目空间管理"])
+@router.get("/project-workspaces", response_model=list[ProjectWorkspaceWithRelations], tags=["项目空间管理"])
 async def list_project_workspaces(
     skip: int = 0,
     limit: int = 100,
@@ -23,7 +23,7 @@ async def list_project_workspaces(
     return await ProjectWorkspaceService.get_project_workspaces(db, skip=skip, limit=limit)
 
 
-@router.post("", response_model=ProjectWorkspaceWithRelations, status_code=status.HTTP_201_CREATED, tags=["项目空间管理"])
+@router.post("/project-workspaces", response_model=ProjectWorkspaceWithRelations, status_code=status.HTTP_201_CREATED, tags=["项目空间管理"])
 async def create_project_workspace(
     project_workspace_in: ProjectWorkspaceCreate,
     db: AsyncSession = Depends(get_db)
@@ -32,7 +32,7 @@ async def create_project_workspace(
     return await ProjectWorkspaceService.create_project_workspace(db, project_workspace_in)
 
 
-@router.get("/{project_workspace_id}", response_model=ProjectWorkspaceWithRelations, tags=["项目空间管理"])
+@router.get("/project-workspaces/{project_workspace_id}", response_model=ProjectWorkspaceWithRelations, tags=["项目空间管理"])
 async def get_project_workspace(
     project_workspace_id: str,
     db: AsyncSession = Depends(get_db)
@@ -56,7 +56,7 @@ async def get_project_workspace(
     return project_workspace
 
 
-@router.put("/{project_workspace_id}", response_model=ProjectWorkspaceWithRelations, tags=["项目空间管理"])
+@router.put("/project-workspaces/{project_workspace_id}", response_model=ProjectWorkspaceWithRelations, tags=["项目空间管理"])
 async def update_project_workspace(
     project_workspace_id: str,
     project_workspace_in: ProjectWorkspaceUpdate,
@@ -75,7 +75,7 @@ async def update_project_workspace(
     return await ProjectWorkspaceService.update_project_workspace(db, project_workspace_id_uuid, project_workspace_in)
 
 
-@router.delete("/{project_workspace_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["项目空间管理"])
+@router.delete("/project-workspaces/{project_workspace_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["项目空间管理"])
 async def delete_project_workspace(
     project_workspace_id: str,
     db: AsyncSession = Depends(get_db)
