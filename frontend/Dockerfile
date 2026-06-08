@@ -12,9 +12,10 @@ RUN npm install
 
 # Receive build arg from docker-compose.yml   build-arg   
 ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 COPY . .
-RUN echo "Starting build..." && \
+RUN echo "Starting build...Starting build with VITE_API_BASE_URL=$VITE_API_BASE_URL..." && \
     npm run build 2>&1 || { \
         echo "========================================"; \
         echo "BUILD FAILED. Checking for common issues..."; \
