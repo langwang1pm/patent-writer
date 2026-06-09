@@ -36,6 +36,27 @@ class KnowledgeConfig(Base):
     score_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.7)
     rerank_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     indexing_technique: Mapped[str] = mapped_column(String(20), nullable=False, default="economy", comment="索引模式: economy(关键词) | high_quality(向量Embedding)")
+
+    # ── 自定义分词规则（对应 Dify process_rule） ──────────────────
+    process_rule_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="automatic",
+        comment="分词模式: automatic(自动) | hierarchical(自定义规则)"
+    )
+    # 预处理规则
+    pre_remove_extra_spaces: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    pre_remove_urls_emails: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 分段规则
+    segment_separator: Mapped[str] = mapped_column(String(50), nullable=False, default="\n\n")
+    segment_max_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=800)
+    parent_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="paragraph")
+    # 文档格式和语言
+    doc_form: Mapped[str] = mapped_column(String(50), nullable=False, default="hierarchical_model")
+    doc_language: Mapped[str] = mapped_column(String(50), nullable=False, default="Chinese Simplified")
+    # Embedding 模型（high_quality 模式需要）
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True, default=None, comment="Embedding 模型名称（high_quality 模式）")
+    embedding_model_provider: Mapped[str | None] = mapped_column(String(100), nullable=True, default=None, comment="Embedding 模型提供商")
+    # ───────────────────────────────────────────────────────────
+
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

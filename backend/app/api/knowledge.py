@@ -63,6 +63,15 @@ async def create_knowledge_config(
         rerank_enabled=data.rerank_enabled,
         indexing_technique=data.indexing_technique,
         is_default=data.is_default,
+        # 自定义分词规则
+        process_rule_mode=data.process_rule_mode,
+        pre_remove_extra_spaces=data.pre_remove_extra_spaces,
+        pre_remove_urls_emails=data.pre_remove_urls_emails,
+        segment_separator=data.segment_separator,
+        segment_max_tokens=data.segment_max_tokens,
+        parent_mode=data.parent_mode,
+        doc_form=data.doc_form,
+        doc_language=data.doc_language,
     )
     db.add(config)
     await db.flush()
