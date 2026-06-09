@@ -1,12 +1,5 @@
-import ky from "ky";
+import { api } from './api'
 import type { EnterpriseInfo, EnterpriseInfoCreateRequest, EnterpriseInfoUpdateRequest } from "../types/enterpriseInfo";
-
-const api = ky.extend({
-  prefixUrl: "/api/v1/enterprise-infos",
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
 
 /** 获取企业信息列表 */
 export async function getEnterpriseInfos(skip = 0, limit = 100): Promise<EnterpriseInfo[]> {

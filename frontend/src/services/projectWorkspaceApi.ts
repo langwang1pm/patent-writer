@@ -1,12 +1,5 @@
-import ky from "ky";
+import { api } from './api'
 import type { ProjectWorkspaceWithRelations, ProjectWorkspaceCreateRequest, ProjectWorkspaceUpdateRequest } from "../types/projectWorkspace";
-
-const api = ky.extend({
-  prefixUrl: "/api/v1/project-workspaces",
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
 
 /** 获取项目空间列表 */
 export async function getProjectWorkspaces(skip = 0, limit = 100): Promise<ProjectWorkspaceWithRelations[]> {

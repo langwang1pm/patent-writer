@@ -1,12 +1,5 @@
-import ky from "ky";
+import { api } from './api'
 import type { TaskType, TaskTypeCreateRequest, TaskTypeUpdateRequest } from "../types/taskType";
-
-const api = ky.extend({
-  prefixUrl: "/api/v1/task-types",
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
 
 /** 获取任务类型列表 */
 export async function getTaskTypes(skip = 0, limit = 100): Promise<TaskType[]> {
