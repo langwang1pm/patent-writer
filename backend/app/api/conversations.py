@@ -1,6 +1,7 @@
 """对话管理 API"""
 import uuid
 import json
+import time  # ← 添加这行
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -412,6 +413,12 @@ async def stream_message(
         dify_message_id = None  # Dify 返回的 message_id,用于后续补拉检索结果
 
         try:
+            # 引入时间模块用于心跳检测
+            import time
+
+            last_activity_time = time.time()
+            HEARTBEAT_INTERVAL = 20  # 20 秒发送一次心跳
+
             async for event_type, delta, extra_data in dify.chat_messages_stream(
                 query=content,
                 user_id=f"patent-writer-{conversation_id}",
@@ -419,6 +426,12 @@ async def stream_message(
                 timeout=settings.dify_timeout_s * 40,
                 inputs=dify_inputs,
             ):
+                # 检查是否需要发送心跳
+                current_time = time.time()
+                if current_time - last_activity_time >= HEARTBEAT_INTERVAL:
+                    yield f"event: heartbeat\ndata: {{\"ping\": true}}\n\n"
+                    last_activity_time = time.time()
+
                 if event_type == "error":
                     error_msg = delta or "Dify 流式调用出错"
                     yield f"event: error\ndata: {{\"message\": {json.dumps(error_msg, ensure_ascii=False)}}}\n\n"
@@ -435,6 +448,7 @@ async def stream_message(
                     conv_id = extra_data.get("conversation_id", "")
                     dify_message_id = extra_data.get("message_id", "")
                     yield f"event: message_end\ndata: {{\"conversation_id\": \"{conv_id}\"}}\n\n"
+                    yield " \n"
 
             if not has_error:
                 # ── 2. 保存 AI 回复 + 创建 Document 实体 ──

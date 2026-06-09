@@ -308,7 +308,7 @@ class DifyClient:
 
         try:
             # 细粒度超时：连接10s，读取不限（流式长生成需要）
-            httpx_timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=60.0)
+            httpx_timeout = httpx.Timeout(connect=10.0, read=600.0, write=60.0, pool=120.0)
             async with httpx.AsyncClient(timeout=httpx_timeout) as client:
                 async with client.stream("POST", url, json=payload, headers=headers) as resp:
                     resp.raise_for_status()
