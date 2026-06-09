@@ -214,7 +214,7 @@ class DifyClient:
                 conv_id = ""
                 citations = []
 
-                httpx_timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=5.0)
+                httpx_timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=60.0)
                 async with httpx.AsyncClient(timeout=httpx_timeout) as client:
                     async with client.stream("POST", url, json=payload, headers=headers) as resp:
                         resp.raise_for_status()
@@ -308,7 +308,7 @@ class DifyClient:
 
         try:
             # 细粒度超时：连接10s，读取不限（流式长生成需要）
-            httpx_timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=5.0)
+            httpx_timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=60.0)
             async with httpx.AsyncClient(timeout=httpx_timeout) as client:
                 async with client.stream("POST", url, json=payload, headers=headers) as resp:
                     resp.raise_for_status()
@@ -352,10 +352,12 @@ class DifyClient:
             error_type = type(e).__name__
             logger.info("dify_stream_exception", error_type=error_type, error_message=error_str)
             
-            if any(keyword in error_str.lower() for keyword in [
-                'connection closed', 'stream ended', 'closed',
-                'connectionreseterror', 'broken pipe'
-            ]):
+            # StopAsyncIteration 是 aiter_lines() 正常结束的信号
+            if error_type in ("StopAsyncIteration", "StopIteration") or \
+               any(keyword in error_str.lower() for keyword in [
+                   'connection closed', 'stream ended', 'closed',
+                   'connectionreseterror', 'broken pipe'
+               ]):
                 logger.info("dify_stream_normal_close", message="SSE 连接正常关闭")
                 return  # 正常结束，不 yield error
             
