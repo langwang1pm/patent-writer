@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     # OnlyOffice Document Server 配置
     onlyoffice_doc_server_url: str = "http://localhost:8080"  # OnlyOffice 文档服务器地址（前端访问）
     onlyoffice_secret: str = ""  # JWT 密钥（留空则不签名）
-    onlyoffice_callback_url: str = "http://localhost:8000"  # OnlyOffice 回调地址（Document Server 访问后端的地址）
+    onlyoffice_callback_url: str = "http://localhost:8002"  # OnlyOffice 回调地址（Document Server 访问后端的地址）
 
     # 应用配置
     app_port: int = 8000

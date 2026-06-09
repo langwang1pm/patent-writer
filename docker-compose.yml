@@ -1,5 +1,31 @@
 services:
   # ============================================
+  # OnlyOffice Document Server
+  # ============================================
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: patent-writer-onlyoffice
+    restart: unless-stopped
+    ports:
+      - "${ONLYOFFICE_PORT:-8080}:80"
+    environment:
+      POSTGRES_DB: onlyoffice
+      POSTGRES_USER: onlyoffice
+      POSTGRES_PASSWORD: onlyoffice
+      JWT_SECRET: ${ONLYOFFICE_SECRET:-}
+    volumes:
+      - onlyoffice-data:/var/www/onlyoffice/Data
+      - onlyoffice-logs:/var/log/onlyoffice
+    networks:
+      - patent-writer-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ============================================
   # 后端服务 — FastAPI
   # ============================================
   backend:
@@ -41,6 +67,10 @@ services:
 
     networks:
       - patent-writer-net
+
+    depends_on:
+      onlyoffice:
+        condition: service_healthy
 
 
 
@@ -92,3 +122,11 @@ networks:
       config:
         - subnet: 172.28.0.0/16
 
+
+
+# ============================================
+# 卷（OnlyOffice 持久化数据）
+# ============================================
+volumes:
+  onlyoffice-data:
+  onlyoffice-logs:
