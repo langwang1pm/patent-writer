@@ -23,6 +23,10 @@ COPY . .
 
 # 非 root 用户
 RUN useradd --create-home --shell /bin/bash appuser && chown -R appuser:appuser /app
+
+# 创建上传目录并赋权（volume 挂载点需预先存在且可写）
+RUN mkdir -p /app/uploads/knowledge_files && chown -R appuser:appuser /app/uploads
+
 USER appuser
 
 EXPOSE 8000

@@ -33,8 +33,8 @@ def get_dify_app_api_key() -> Optional[str]:
     return os.getenv("DIFY_API_KEY")
 
 
-# 本地文件存储目录
-UPLOAD_DIR = Path("uploads/knowledge_files")
+# 本地文件存储目录（支持环境变量配置，Docker 部署时挂载 volume）
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads/knowledge_files"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 logger = logging.getLogger(__name__)
