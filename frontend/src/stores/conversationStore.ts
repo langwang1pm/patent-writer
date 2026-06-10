@@ -208,10 +208,20 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           }
         })
 
+        // ── heartbeat：心跳保活，清除恢复定时器 ──
+        eventSource.addEventListener('heartbeat', () => {
+          if (errorRecoveryTimer) {
+            clearTimeout(errorRecoveryTimer)
+            errorRecoveryTimer = null
+            console.log('[SSE] 心跳到达，连接已恢复')
+          }
+        })
+
         // ── content_delta：解析 think 标签，分离思考和正文 ──
         // 节流：避免每个 delta 都触发 React 重渲染
         let lastRenderTime = 0
         let pendingRenderTimer: ReturnType<typeof setTimeout> | null = null
+        let errorRecoveryTimer: ReturnType<typeof setTimeout> | null = null
         const RENDER_INTERVAL_MS = 50  // 每 50ms 最多渲染一次（~20fps）
 
         const scheduleRender = () => {
@@ -235,6 +245,12 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
         eventSource.addEventListener('content_delta', (event: any) => {
           if (isDone) return
+          // 有数据到达，清除恢复定时器
+          if (errorRecoveryTimer) {
+            clearTimeout(errorRecoveryTimer)
+            errorRecoveryTimer = null
+            console.log('[SSE] 连接已恢复，继续接收')
+          }
           try {
             const data = JSON.parse(event.data)
             const delta = data.delta || ''
@@ -351,10 +367,14 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           if (isDone) return
           isDone = true
 
-          // 清除节流定时器，确保最终内容完整渲染
+          // 清除节流定时器和恢复定时器
           if (pendingRenderTimer) {
             clearTimeout(pendingRenderTimer)
             pendingRenderTimer = null
+          }
+          if (errorRecoveryTimer) {
+            clearTimeout(errorRecoveryTimer)
+            errorRecoveryTimer = null
           }
 
           try {
@@ -399,15 +419,22 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           resolve()
         })
 
-        // 超时处理（300秒）
+        // 超时处理（600秒内未收到数据则认为超时）
         setTimeout(() => {
           if (get().isStreaming) {
-            console.warn('SSE 超时（300秒）')
-            eventSource.close()
-            set({ isStreaming: false, streamPhase: 'done' })
-            resolve()
+            console.warn('SSE 超时（600秒）——内容可能不完整')
+            const currentContent = get().messages.find(m => m.id === aiMsgId)?.content
+            if (currentContent && currentContent.length > 0) {
+              // 已有内容，保留已有内容但标记为完成
+              set({ isStreaming: false, streamPhase: 'done' })
+              resolve()
+            } else {
+              eventSource.close()
+              set({ isStreaming: false, streamPhase: 'done' })
+              resolve()
+            }
           }
-        }, 300000)
+        }, 600000)
 
         // 连接错误处理
         eventSource.onerror = () => {
