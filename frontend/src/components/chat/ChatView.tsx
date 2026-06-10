@@ -196,7 +196,14 @@ export default function ChatView() {
                   {(() => {
                     const lastMsg = group.msgs[group.msgs.length - 1]
                     if (lastMsg?.docx_url) {
-                      const fileName = '文档-' + (lastMsg.document_id ? lastMsg.document_id.slice(0, 8) : 'unknown') + '.docx'
+                      const firstMsg = group.msgs[0]
+                      const h1Match = firstMsg?.content?.match(/^#\s+(.+)$/m)
+                      let fileName: string
+                      if (h1Match) {
+                        fileName = h1Match[1].trim().replace(/[<>:"\\|?*\x00-\x1f]/g, '').replace(/\s+/g, ' ').slice(0, 80) + '.docx'
+                      } else {
+                        fileName = `文档-${lastMsg.document_id?.slice(0, 8) || 'unknown'}.docx`
+                      }
                       return (
                         <FileAttachment
                           fileName={fileName}
