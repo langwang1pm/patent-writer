@@ -99,7 +99,9 @@ export default function ProjectWorkspacePage() {
                 className="bg-white rounded-lg shadow hover:shadow-lg transition p-6 border border-gray-200"
               >
                 <div className="flex justify-between items-start mb-4">
-                  <h3 className="text-xl font-semibold text-gray-900">{project.workspace_name}</h3>
+                  <h3 className="text-xl font-semibold text-gray-900 truncate" title={project.workspace_name}>
+                  {project.workspace_name.length > 15 ? project.workspace_name.slice(0, 15) + '...' : project.workspace_name}
+                  </h3>
                   <div className="flex gap-2">
                     <button
                       onClick={() => openEditModal(project)}
