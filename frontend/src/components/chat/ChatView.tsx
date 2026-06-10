@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Send, FileText, Plus, BookOpen } from 'lucide-react'
 import { useConversationStore, type StreamPhase } from '@/stores/conversationStore'
@@ -8,6 +8,7 @@ import { useChatCitations } from '@/hooks/useChatCitations'
 import CitationPanel from '@/components/layout/CitationPanel'
 import { useCitationStore } from '@/stores/citationStore'
 import ContentCard from '@/components/chat/ContentCard'
+import FileAttachment from '@/components/chat/FileAttachment'
 
 export default function ChatView() {
   const navigate = useNavigate()
@@ -154,38 +155,61 @@ export default function ChatView() {
         <div ref={scrollContainerRef}
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
-          {messages.map((message) => (
+          {(() => {
+            const groups: { msgs: (typeof messages)[0][]; isUser: boolean }[] = []
+            messages.forEach((msg) => {
+              const isUser = msg.role === 'user'
+              const lastGroup = groups[groups.length - 1]
+              if (lastGroup && !lastGroup.isUser && !isUser) {
+                lastGroup.msgs.push(msg)
+              } else {
+                groups.push({ msgs: [msg], isUser })
+              }
+            })
+            return groups
+          })().map((group, groupIdx) => (
             <div
-              key={message.id}
+              key={groupIdx}
               className={cn(
                 'flex',
-                message.role === 'user' ? 'justify-end' : 'justify-start'
+                group.isUser ? 'justify-end' : 'justify-start'
               )}
             >
-              <div
-                className={cn(
-                  'rounded-2xl px-4 py-3 max-w-[85%]',
-                  message.role === 'user'
-                    ? 'bg-primary-600 text-white ml-auto'
-                    : 'w-full bg-gray-100 text-gray-800'
-                )}
-              >
-                {message.role === 'user' && (
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                )}
-
-                {/* ✅ 正确：role === 'assistant' */}
-                {message.role === 'assistant' && (
-                  <ContentCard
-                    content={message.content}
-                    documentId={message.document_id}
-                    docxUrl={message.docx_url || null}
-                    isStreaming={isStreaming && message.id.startsWith('temp-ai-')}
-                    thinkingContent={message.thinking_content}
-                    onCitationClick={handleCitationClick}
-                  />
-                )}
-              </div>
+              {group.isUser ? (
+                <div className="rounded-2xl px-4 py-3 max-w-[85%] bg-primary-600 text-white ml-auto">
+                  <p className="text-sm whitespace-pre-wrap">{group.msgs[0].content}</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-start max-w-[85%]">
+                  <div className="w-full bg-gray-100 text-gray-800 rounded-2xl px-4 py-3 space-y-2">
+                    {group.msgs.map((msg) => (
+                      <ContentCard
+                        key={msg.id}
+                        content={msg.content}
+                        documentId={msg.document_id}
+                        docxUrl={msg.docx_url || null}
+                        isStreaming={isStreaming && msg.id.startsWith('temp-ai-')}
+                        thinkingContent={msg.thinking_content}
+                        onCitationClick={handleCitationClick}
+                      />
+                    ))}
+                  {(() => {
+                    const lastMsg = group.msgs[group.msgs.length - 1]
+                    if (lastMsg?.docx_url) {
+                      const fileName = '文档-' + (lastMsg.document_id ? lastMsg.document_id.slice(0, 8) : 'unknown') + '.docx'
+                      return (
+                        <FileAttachment
+                          fileName={fileName}
+                          fileUrl={lastMsg.docx_url}
+                          documentId={lastMsg.document_id || undefined}
+                        />
+                      )
+                    }
+                    return null
+                  })()}
+                </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

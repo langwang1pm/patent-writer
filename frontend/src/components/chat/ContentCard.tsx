@@ -4,7 +4,6 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { cn } from '@/utils/cn'
-import FileAttachment from '@/components/chat/FileAttachment'
 
 interface ContentCardProps {
   content: string
@@ -155,13 +154,7 @@ export default function ContentCard({
           >
             {content}
           </ReactMarkdown>
-          {docxUrl && (
-            <FileAttachment
-              fileName={safeFileName}
-              fileUrl={docxUrl}
-              documentId={documentId || undefined}
-            />
-          )}
+
         </div>
       </div>
     </div>
