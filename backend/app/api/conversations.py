@@ -645,7 +645,6 @@ async def export_message_as_docx(
     # 从 Markdown 生成 docx bytes
     docx_bytes = markdown_to_docx_bytes(
         markdown_text=message.content,
-        title="AI 回复",
     )
 
     # 生成文件名(取对话标题前 30 字符)

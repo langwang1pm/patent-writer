@@ -128,7 +128,6 @@ async def export_document(
     md_text = document.content_markdown or document.content_html
     docx_bytes = markdown_to_docx_bytes(
         markdown_text=md_text,
-        title=document.title,
     )
 
     # 取对话标题作为文件名
