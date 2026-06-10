@@ -25,6 +25,8 @@ export default function ChatView() {
   const [inputValue, setInputValue] = useState('')
   const [showCitationPanel, setShowCitationPanel] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const userScrolledUpRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const citations = useCitationStore((s) => s.citations)
   const citationCount = citations.length
@@ -54,9 +56,21 @@ export default function ChatView() {
     }
   }, [conversationId, setCurrentConversation])
 
+  // 自动滚动到底部：流式输出时始终滚动，用户手动向上滚动时暂停
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    const container = scrollContainerRef.current
+    if (!container || userScrolledUpRef.current) return
+    container.scrollTop = container.scrollHeight
+  }, [messages, isStreaming])
+
+  // 监听滚动事件，使用 ref 避免引起重渲染循环
+  const handleScroll = () => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    const threshold = 100
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold
+    userScrolledUpRef.current = !isNearBottom
+  }
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -137,7 +151,9 @@ export default function ChatView() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
+        <div ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
           {messages.map((message) => (
             <div
               key={message.id}
@@ -148,10 +164,10 @@ export default function ChatView() {
             >
               <div
                 className={cn(
-                  'max-w-[85%] rounded-2xl px-4 py-3',
+                  'rounded-2xl px-4 py-3 max-w-[85%]',
                   message.role === 'user'
                     ? 'bg-primary-600 text-white ml-auto'
-                    : 'bg-gray-100 text-gray-800'
+                    : 'w-full bg-gray-100 text-gray-800'
                 )}
               >
                 {message.role === 'user' && (
@@ -164,7 +180,7 @@ export default function ChatView() {
                     content={message.content}
                     documentId={message.document_id}
                     docxUrl={message.docx_url || null}
-                    isStreaming={false}
+                    isStreaming={isStreaming && message.id.startsWith('temp-ai-')}
                     thinkingContent={message.thinking_content}
                     onCitationClick={handleCitationClick}
                   />
@@ -173,45 +189,6 @@ export default function ChatView() {
             </div>
           ))}
         </div>
-
-        {/* 流式阶段提示 */}
-        {isStreaming && streamPhase !== 'idle' && streamPhase !== 'done' && (
-          <div className="flex justify-start px-4">
-            <div className="bg-gray-100 rounded-2xl px-4 py-3">
-              <div className="flex items-center gap-2.5 text-sm text-gray-500">
-                <span className="text-primary-500 flex-shrink-0">
-                  {streamPhase === 'connecting' && (
-                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                  )}
-                  {streamPhase === 'thinking' && (
-                    <div className="flex gap-1">
-                      <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  )}
-                  {streamPhase === 'generating' && (
-                    <div className="flex gap-1">
-                      <div className="w-1.5 h-1.5 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <div className="w-1.5 h-1.5 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <div className="w-1.5 h-1.5 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  )}
-                </span>
-                <div className="flex flex-col">
-                  <span className="font-medium text-gray-600">
-                    {streamPhase === 'connecting' && '正在连接服务'}
-                    {streamPhase === 'thinking' && 'AI 正在思考'}
-                    {streamPhase === 'generating' && '正在生成内容'}
-                  </span>
-                  {streamPhase === 'thinking' && (
-                    <span className="text-xs text-gray-400 -mt-0.5">正在检索知识库并分析需求...</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         <div ref={messagesEndRef} />
 

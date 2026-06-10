@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -59,12 +59,40 @@ export default function ContentCard({
 
   const hasThinking = thinkingContent && thinkingContent.trim().length > 0
 
+  // 流式输出时自动展开思考过程，完成后自动收起
+  useEffect(() => {
+    if (hasThinking) {
+      if (!isStreaming) {
+        // 流式结束，收起
+        setThinkingCollapsed(true)
+      } else if (content.trim().length > 0) {
+        // 正文开始输出，思考过程收起
+        setThinkingCollapsed(true)
+      } else {
+        // 只有思考内容，展开供用户查看
+        setThinkingCollapsed(false)
+      }
+    }
+  }, [isStreaming, hasThinking, content])
+
   return (
     <div className={cn(
       'flex justify-start',
       isStreaming && 'animate-in fade-in duration-200'
     )}>
-      <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-white shadow-sm" style={{ color: 'black' }}>
+      <div className="max-w-[100%] rounded-2xl px-4 py-3 bg-white shadow-sm w-full" style={{ color: 'black' }}>
+        {/* 流式输出中（AI 正在思考阶段） */}
+          {isStreaming && !hasThinking && (
+            <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
+              <div className="flex gap-1">
+                <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+              <span className="font-medium text-gray-600 whitespace-nowrap">AI 正在思考</span>
+            </div>
+          )}
+
         {/* 思考内容（可折叠） */}
         {hasThinking && (
           <div className="mb-3 border border-amber-200 bg-amber-50 rounded-lg overflow-hidden">
@@ -74,7 +102,7 @@ export default function ContentCard({
               className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100/50 transition-colors"
             >
               <Sparkles className="w-4 h-4 text-amber-500" />
-              <span>{thinkingCollapsed ? '查看思考过程' : '收起思考过程'}</span>
+              <span className="whitespace-nowrap">{thinkingCollapsed ? '查看思考过程' : '收起思考过程'}</span>
               {thinkingCollapsed ? (
                 <ChevronDown className="w-4 h-4 ml-auto text-amber-400" />
               ) : (
@@ -127,13 +155,6 @@ export default function ContentCard({
           >
             {content}
           </ReactMarkdown>
-
-          {/* 流式输出时的光标 */}
-          {isStreaming && (
-            <span className="inline-block w-2 h-4 bg-primary-400 animate-pulse ml-0.5" />
-          )}
-
-          {/* docx 附件卡片 */}
           {docxUrl && (
             <FileAttachment
               fileName={safeFileName}
