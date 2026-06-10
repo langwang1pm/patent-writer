@@ -18,6 +18,7 @@ export default function DocumentView() {
   const [isEditing, setIsEditing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [pageTitle, setPageTitle] = useState('')
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const editor = useEditor({
@@ -48,13 +49,27 @@ export default function DocumentView() {
         setDocument(doc)
         setCitations(doc.citations || [])
 
-        if (editor && doc.content_html) {
-          // 优先使用 content_html（HTML 格式）
-          editor.commands.setContent(doc.content_html)
-        } else if (editor && doc.content_markdown) {
-          // 兼容：如果 content_html 不存在，用 content_markdown 转换
-          const htmlContent = await marked.parse(doc.content_markdown)
-          editor.commands.setContent(htmlContent)
+        // 从正文 markdown 中提取第一个 H1 作为页面标题
+        const md = doc.content_markdown || doc.content_html || ''
+        const headingMatch = md.match(/^#\s+(.+)$/m)
+        if (headingMatch) {
+          setPageTitle(headingMatch[1].trim())
+        } else {
+          setPageTitle(doc.title)
+        }
+
+        if (editor) {
+          // content_html 可能存的是 markdown（创建时）或 HTML（编辑保存后）
+          // 判断是否为真实 HTML：以 < 开头则为 HTML，否则当作 markdown 处理
+          if (doc.content_html && doc.content_html.trim().startsWith('<')) {
+            editor.commands.setContent(doc.content_html)
+          } else if (doc.content_markdown) {
+            const htmlContent = await marked.parse(doc.content_markdown)
+            editor.commands.setContent(htmlContent)
+          } else if (doc.content_html) {
+            const htmlContent = await marked.parse(doc.content_html)
+            editor.commands.setContent(htmlContent)
+          }
         }
       } catch (error) {
         console.error('加载文档失败:', error)
@@ -126,7 +141,7 @@ export default function DocumentView() {
             返回
           </button>
           <span className="text-gray-300">/</span>
-          <span className="text-sm font-medium text-gray-900">{document.title}</span>
+          <span className="text-sm font-medium text-gray-900">{pageTitle}</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -158,11 +173,6 @@ export default function DocumentView() {
       {/* 编辑器 */}
       <div className="flex-1 overflow-y-auto bg-white">
         <div className="max-w-3xl mx-auto px-8 py-8">
-          {/* 标题 */}
-          <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-            {document.title}
-          </h1>
-
           {/* 内容 */}
           <div className={cn('prose prose-sm max-w-none', isEditing && 'min-h-[500px]')}>
             <EditorContent
