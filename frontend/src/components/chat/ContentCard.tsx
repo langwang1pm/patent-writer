@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -24,6 +24,38 @@ export default function ContentCard({
   onCitationClick,
 }: ContentCardProps) {
   const [thinkingCollapsed, setThinkingCollapsed] = useState(true)  // 思考内容默认折叠
+
+  // 从正文 markdown 中提取标题作为文件名
+  const docTitle = useMemo(() => {
+    if (!content) return null
+
+    // 1. 尝试匹配第一个 # 开头的 H1 标题
+    const headingMatch = content.match(/^#\s+(.+)$/m)
+    if (headingMatch) return headingMatch[1].trim()
+
+    // 2. 回退：取第一段非空文本（最多 50 字符）
+    const firstLine = content
+      .split('\n')
+      .map(l => l.trim())
+      .find(l => l.length > 0 && !l.startsWith('#'))
+    if (firstLine) return firstLine.slice(0, 50).trim()
+
+    return null
+  }, [content])
+
+  // 安全文件名：去除 Windows 非法字符，限制长度
+  const safeFileName = useMemo(() => {
+    const title = docTitle
+    if (!title) return `文档-${documentId?.slice(0, 8) || 'unknown'}.docx`
+    const sanitized = title
+      .replace(/[<>:\x22/\\|?*\x00-\x1f]/g, '')  // 去除 Windows 文件名非法字符
+      .replace(/\s+/g, ' ')                    // 合并多余空白
+      .trim()
+      .slice(0, 80)                            // 限制长度
+    return sanitized.length > 0
+      ? `${sanitized}.docx`
+      : `文档-${documentId?.slice(0, 8) || 'unknown'}.docx`
+  }, [docTitle, documentId])
 
   const hasThinking = thinkingContent && thinkingContent.trim().length > 0
 
@@ -104,7 +136,7 @@ export default function ContentCard({
           {/* docx 附件卡片 */}
           {docxUrl && (
             <FileAttachment
-              fileName={`文档-${documentId?.slice(0, 8) || 'unknown'}.docx`}
+              fileName={safeFileName}
               fileUrl={docxUrl}
               documentId={documentId || undefined}
             />

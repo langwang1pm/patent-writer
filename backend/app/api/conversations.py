@@ -60,6 +60,31 @@ def _get_llm_service() -> LLMService:
     return LLMService(dify_client=_get_dify_client())
 
 
+def _extract_title_from_content(content: str | None, max_length: int = 30) -> str:
+    """从生成的文档正文中提取标题（取第一句话）"""
+    if not content or not content.strip():
+        return ""
+    
+    import re
+    text = content.strip()
+    
+    # 去掉 markdown 标题标记（### 标题 -> 标题）
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    
+    # 取第一句话（按句号、问号、感叹号、换行符分割）
+    sentences = re.split(r'(?<=[。！？.!?])\s*', text)
+    title = sentences[0].strip() if sentences else text
+    
+    # 去掉 markdown 加粗/斜体符号
+    title = title.replace('**', '').replace('__', '')
+    
+    if not title:
+        title = text[:max_length].replace('\n', ' ').strip()
+    
+    return title[:max_length]
+
+
+ 
 @router.post("/conversations", response_model=ConversationResponse, status_code=201)
 async def create_conversation(
     data: ConversationCreate,
@@ -296,7 +321,7 @@ async def send_message(
         ai_content = f"⚠️ 调用 AI 服务失败:{str(e)}\n\n请检查 Dify 服务是否正常运行,或稍后重试。"
 
     # 创建 AI 回复 + Document 实体
-    auto_title = data.content[:30].replace('\n', ' ').strip() or "AI 回复"
+    auto_title = _extract_title_from_content(ai_content) or "AI 回复"
     document = Document(
         conversation_id=conversation_id,
         title=auto_title,
@@ -466,7 +491,7 @@ async def stream_message(
                     clean_content = ai_content
 
                 # 创建 Document 实体(持久化附件,支持后续编辑/AI修改)
-                auto_title = content[:30].replace('\n', ' ').strip() or "AI 回复"
+                auto_title = _extract_title_from_content(clean_content) or "AI 回复"
                 document = Document(
                     conversation_id=conversation_id,
                     title=auto_title,
