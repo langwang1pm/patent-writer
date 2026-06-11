@@ -313,13 +313,19 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
         const renderBlocks = () => {
           const blocks = parseContentBlocks(fullContent)
+          // 保留当前 temp-ai 消息上已有的 document_id 和 docx_url
+          const existingMsgs = get().messages
+          const existingTempMsg = existingMsgs.find(m => m.id.startsWith('temp-ai-'))
+          const existingDocId = existingTempMsg?.document_id ?? null
+          const existingDocxUrl = existingTempMsg?.docx_url ?? null
           const blockMessages = blocks.map((block, idx) => ({
             id: `temp-ai-${idx}-${startTime}`,
             conversation_id: currentConversationId,
             role: 'assistant' as const,
             content: block.content,
             thinking_content: block.thinking || null,
-            document_id: null,
+            document_id: existingDocId,
+            docx_url: existingDocxUrl,
             created_at: new Date().toISOString(),
           }))
           const msgs = get().messages
@@ -452,7 +458,6 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
             if (citations.length > 0) {
               useCitationStore.getState().setCitations(citations)
             }
-            const lastBlockContent = blocks.length > 0 ? blocks[blocks.length - 1].content : ''
             console.log('[SSE] done:', data, '| aiMessageId:', aiMessageId, '| documentId:', documentId, '| docxUrl:', docxUrl)
 
             // 最终处理：确保正文内容正确（去掉思考标签部分）
