@@ -46,6 +46,6 @@ export const useCitationStore = create<CitationState>((set) => ({
         id: 'cit-' + i,
         ref_mark: refCircles[i] || '[' + (i + 1) + ']',
       }))
-      return { citations: reindexed }
+      return { citations: reindexed as Citation[] }
     }),
 }))

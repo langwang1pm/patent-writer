@@ -5,6 +5,10 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { cn } from '@/utils/cn'
 
+import rehypeRaw from 'rehype-raw'
+import CitationBadge, { processCitationContent } from '@/components/citation/CitationBadge'
+import { useCitationStore } from '@/stores/citationStore'
+
 interface ContentCardProps {
   content: string
   documentId: string | null
@@ -25,6 +29,13 @@ export default function ContentCard({
   const [thinkingCollapsed, setThinkingCollapsed] = useState(true)  // 思考内容默认折叠
 
   // 从正文 markdown 中提取标题作为文件名
+  const citations = useCitationStore((s) => s.citations)
+
+  // 处理正文中的引用块，将 【引用来源：...】 替换为可交互徽章
+  const processedContent = useMemo(() => {
+    return processCitationContent(content, citations)
+  }, [content, citations])
+
   const docTitle = useMemo(() => {
     if (!content) return null
 
@@ -136,7 +147,24 @@ export default function ContentCard({
         >
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkBreaks]}
+            rehypePlugins={[rehypeRaw]}
             components={{
+              sup: ({ className, children, ...props }) => {
+                if (className && className.includes('citation-ref')) {
+                  const idx = Number((props as any)['data-index'] || 0)
+                  const refMark = String((props as any)['data-ref-mark'] || children?.toString() || '')
+                  return (
+                    <CitationBadge
+                      refMark={refMark}
+                      index={idx}
+                      sourceName={String((props as any)['data-source'] || '')}
+                      chunkContent={String((props as any)['data-chunk'] || '')}
+                      citationId={String((props as any)['data-citation-id'] || '')}
+                    />
+                  )
+                }
+                return <sup className={className}>{children}</sup>
+              },
               p: ({ children }) => <p style={{ color: 'black', margin: '0.5em 0', wordBreak: 'break-all', overflowWrap: 'break-word' }}>{children}</p>,
               li: ({ children }) => <li style={{ color: 'black', wordBreak: 'break-all' }}>{children}</li>,
               h1: ({ children }) => <h1 style={{ color: 'black', fontSize: '1.5rem', fontWeight: 600, margin: '1em 0 0.5em', wordBreak: 'break-all' }}>{children}</h1>,
@@ -152,7 +180,7 @@ export default function ContentCard({
               ),
             }}
           >
-            {content}
+            {processedContent}
           </ReactMarkdown>
 
         </div>
