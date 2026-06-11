@@ -33,7 +33,12 @@ export default function ContentCard({
 
   // 处理正文中的引用块，将 【引用来源：...】 替换为可交互徽章
   const processedContent = useMemo(() => {
-    return processCitationContent(content, citations)
+    // HTML escape to prevent rehypeRaw from mis-parsing angle brackets in markdown
+    const safeContent = content
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+    return processCitationContent(safeContent, citations)
   }, [content, citations])
 
   const docTitle = useMemo(() => {

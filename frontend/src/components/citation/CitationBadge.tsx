@@ -117,15 +117,15 @@ export default function CitationBadge({
  *   <sup class="citation-ref" data-index="0" data-citation-id="cit-0" data-source="某某文件.docx">①</sup>
  *   <sup class="citation-ref" data-index="1" data-citation-id="cit-1" data-source="某某文件.docx">②</sup>
  */
-export ﻿﻿﻿﻿function processCitationContent(
+export ﻿﻿﻿﻿﻿﻿function processCitationContent(
   content: string,
   citations: Array<{ id: string; ref_mark: string; source_name: string; chunk_content?: string }>
 ): string {
   if (!content) return content
 
   const CITATION_BLOCK_RE = /【引用来源[：:]\s*([^】]+)】/g
-  const matchedBadgeNums = new Map<string, number>()
-  let fallbackSeq = 0
+  const dedupMap = new Map<string, number>()
+  let badgeSeq = 0
 
   function formatInner(text: string): string {
     const segRefRe = /[-–—]\s*(第\d+段|Chunk-\d+)/i
@@ -140,40 +140,26 @@ export ﻿﻿﻿﻿function processCitationContent(
   }
 
   return content.replace(CITATION_BLOCK_RE, (_match: string, inner: string) => {
+    const dedupKey = inner.trim()
+    let badgeNum = dedupMap.get(dedupKey)
+    if (badgeNum === undefined) {
+      badgeNum = ++badgeSeq
+      dedupMap.set(dedupKey, badgeNum)
+    }
+
     const segRefRe = /[-–—]\s*(第\d+段|Chunk-\d+)/i
     const segMatch = inner.match(segRefRe)
     const sourceName = segMatch ? inner.substring(0, segMatch.index!).trim() : inner.trim()
 
-    const matched = sourceName
-      ? citations.filter(c => sourceName.length > 0 && c.source_name.includes(sourceName))
+    // 优先精确匹配，降级到模糊匹配
+    const exactMatch = sourceName
+      ? citations.filter(c => sourceName.length > 0 && c.source_name === dedupKey)
       : []
-
-    let badgeNum: number
-
-    if (matched.length > 0) {
-      // 使用第一条匹配记录在 citationStore 中的位置作为序号
-      const storeIdx = citations.findIndex(c => c.id === matched[0].id)
-      badgeNum = storeIdx >= 0 ? storeIdx + 1 : ++fallbackSeq
-
-      // 去重：同一 store 记录只分配一次序号
-      const dedupKey = matched[0].id
-      const existing = matchedBadgeNums.get(dedupKey)
-      if (existing !== undefined) {
-        badgeNum = existing
-      } else {
-        matchedBadgeNums.set(dedupKey, badgeNum)
-      }
-    } else {
-      // 无 store 匹配：用完整 inner 去重
-      const dedupKey = inner.trim()
-      const existing = matchedBadgeNums.get(dedupKey)
-      if (existing !== undefined) {
-        badgeNum = existing
-      } else {
-        badgeNum = ++fallbackSeq
-        matchedBadgeNums.set(dedupKey, badgeNum)
-      }
-    }
+    const matched = exactMatch.length > 0
+      ? exactMatch
+      : sourceName
+        ? citations.filter(c => sourceName.length > 0 && c.source_name.includes(sourceName))
+        : []
 
     const formatted = formatInner(inner)
     const safeChunk = formatted.replace(/"/g, '&quot;')
@@ -187,6 +173,8 @@ export ﻿﻿﻿﻿function processCitationContent(
     return '<sup class="citation-ref" data-citation-id="" data-index="' + badgeNum + '" data-source="' + safeChunk + '" data-chunk="' + safeChunk + '" data-ref-mark="' + badgeNum + '">' + badgeNum + '</sup>'
   })
 }
+
+
 
 
 

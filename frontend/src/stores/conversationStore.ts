@@ -462,11 +462,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
             // 最终处理：确保正文内容正确（去掉思考标签部分）
             const blocks = parseContentBlocks(fullContent)
-            let finalContent = blocks.length > 0 ? blocks[blocks.length - 1].content : fullContent
-            const thinkEndMatch = fullContent.match(/<\/think>/i)
-            if (thinkEndMatch) {
-              finalContent = fullContent.substring(thinkEndMatch.index! + thinkEndMatch[0].length).trim()
-            }
+            const allBlocks = parseContentBlocks(fullContent)
+            let finalContent = allBlocks.length > 0 ? allBlocks[allBlocks.length - 1].content : fullContent
 
             // 所有块共享同一个 document_id 和 docx_url
             if (aiMessageId) {
