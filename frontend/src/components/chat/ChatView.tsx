@@ -180,7 +180,7 @@ export default function ChatView() {
                   <p className="text-sm whitespace-pre-wrap">{group.msgs[0].content}</p>
                 </div>
               ) : (
-                <div className="flex flex-col items-start max-w-[85%]">
+                <div className="flex flex-col items-start max-w-[85%] w-full">
                   <div className="w-full bg-gray-100 text-gray-800 rounded-2xl px-4 py-3 space-y-2">
                     {group.msgs.map((msg) => (
                       <ContentCard
@@ -196,7 +196,7 @@ export default function ChatView() {
                   {(() => {
                     const lastMsg = group.msgs[group.msgs.length - 1]
                     if (lastMsg) {
-                      const docxUrl = lastMsg.docx_url || (lastMsg.document_id ? `/api/v1/documents//export-docx` : null)
+                      const docxUrl = lastMsg.docx_url || (lastMsg.document_id ? ``/api/v1/documents/${lastMsg.document_id}/export-docx`` : null)
                       if (docxUrl) {
                         const firstMsg = group.msgs[0]
                       const h1Match = firstMsg?.content?.match(/^#\s+(.+)$/m)
