@@ -89,11 +89,21 @@ export default function CitationBadge({
                 {chunkContent.split('\\n').map((line, li) => {
                   const uuidMatch = line.match(/^([0-9a-f-]{36})~~~(.+?)~~~(.+)$/)
                   if (uuidMatch) {
-                    const docUrl = '/preview?fileKey=kb:' + uuidMatch[1] + '&fileName=' + encodeURIComponent(uuidMatch[2]) + '&mode=view'
+                                        // 优先使用 citationStore 中的 source_id（更可靠），否则从文本提取 UUID
+                    const sourceId = citationId
+                      ? (() => { const c = useCitationStore.getState().citations.find(ci => ci.id === citationId); return c ? c.source_id : null })()
+                      : null
+                    const docUuid = sourceId || uuidMatch[1]
+                    const docName = uuidMatch[2]
+                    const ext = docName.split('.').pop()?.toLowerCase() || ''
+                    const isOffice = ['doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp','csv'].includes(ext)
+                    const docUrl = isOffice
+                      ? '/preview?fileKey=kb:' + docUuid + '&fileName=' + encodeURIComponent(docName) + '&mode=view'
+                      : '/api/v1/knowledge/files/' + docUuid + '/download?disposition=inline'
                     return (
                       <p key={li} className="mb-0.5 last:mb-0 whitespace-pre-wrap break-all">
                         <a href={docUrl} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-800 underline font-medium">
-                          {uuidMatch[2]}
+                          {docName}
                         </a>
                         ~~~{uuidMatch[3]}
                       </p>
@@ -142,11 +152,11 @@ export ﻿﻿﻿﻿﻿﻿function processCitationContent(
     const segMatch = text.match(segRefRe)
     const srcName = segMatch ? text.substring(0, segMatch.index!).trim() : ''
     return text.split(/[；;]/).map(s => s.trim()).filter(Boolean).map(part => {
-      if (srcName && !part.match(/[-–—]\s*(第\d+段|Chunk-\d+)/i)) {
+      if (srcName && !part.match(/(?:[-–—]\s*|~~~)(第\d+段|Chunk-\d+)/i)) {
         return srcName + '- ' + part
       }
       return part
-    }).join('\n')
+    }).join('\\n')
   }
 
   return content.replace(CITATION_BLOCK_RE, (_match: string, inner: string) => {

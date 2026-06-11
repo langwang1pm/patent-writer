@@ -437,6 +437,22 @@ async def delete_knowledge_file(
         raise HTTPException(status_code=500, detail=f"连接 Dify 失败: {str(e)}")
 
 
+@router.get("/knowledge/files/by-dify-doc/{dify_document_id}")
+async def get_knowledge_file_by_dify_doc(
+    dify_document_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """根据 Dify 文档 ID 获取知识库文件信息"""
+    result = await db.execute(
+        select(KnowledgeFile).where(KnowledgeFile.dify_document_id == dify_document_id)
+    )
+    kf = result.scalar_one_or_none()
+    if not kf:
+        raise HTTPException(status_code=404, detail="知识库文件不存在")
+    return {"id": str(kf.id), "name": kf.name, "dify_document_id": kf.dify_document_id}
+
+
+
 @router.get("/knowledge/files/search")
 async def search_knowledge_files(
     q: str,

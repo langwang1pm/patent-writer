@@ -97,7 +97,7 @@ export function useChatCitations() {
       chunk_content: ref.chunkLabel
         ? `${ref.sourceName} (${ref.chunkLabel})`
         : ref.sourceName,
-      source_id: null,
+      source_id: (ref.sourceName.match(/^([0-9a-f-]{36})~~~/) || [])[1] || null,
       chunk_id: ref.chunkLabel || null,
       score: null,
       position_start: ref.position,
