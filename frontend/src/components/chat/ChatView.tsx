@@ -195,8 +195,10 @@ export default function ChatView() {
                     ))}
                   {(() => {
                     const lastMsg = group.msgs[group.msgs.length - 1]
-                    if (lastMsg?.docx_url) {
-                      const firstMsg = group.msgs[0]
+                    if (lastMsg) {
+                      const docxUrl = lastMsg.docx_url || (lastMsg.document_id ? `/api/v1/documents//export-docx` : null)
+                      if (docxUrl) {
+                        const firstMsg = group.msgs[0]
                       const h1Match = firstMsg?.content?.match(/^#\s+(.+)$/m)
                       let fileName: string
                       if (h1Match) {
@@ -207,10 +209,11 @@ export default function ChatView() {
                       return (
                         <FileAttachment
                           fileName={fileName}
-                          fileUrl={lastMsg.docx_url}
+                          fileUrl={docxUrl}
                           documentId={lastMsg.document_id || undefined}
                         />
                       )
+                      }
                     }
                     return null
                   })()}

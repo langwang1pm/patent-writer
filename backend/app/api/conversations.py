@@ -436,6 +436,7 @@ async def stream_message(
         ai_message_id = None
         ai_message = None  # 闭包外初始化,避免 done 事件中引用未定义变量
         dify_message_id = None  # Dify 返回的 message_id,用于后续补拉检索结果
+        sse_retriever_resources = []  # SSE message_end 事件中的检索来源
 
         try:
             # 引入时间模块用于心跳检测
@@ -472,6 +473,12 @@ async def stream_message(
                 elif event_type == "message_end":
                     conv_id = extra_data.get("conversation_id", "")
                     dify_message_id = extra_data.get("message_id", "")
+                    # 从 SSE 事件中提取检索来源（如果 Dify 有输出）
+                    sse_retriever_resources = (
+                        extra_data.get("retriever_resources")
+                        or extra_data.get("retrieval_resources")
+                        or []
+                    )
                     yield f"event: message_end\ndata: {{\"conversation_id\": \"{conv_id}\"}}\n\n"
                     yield " \n"
 
@@ -525,9 +532,10 @@ async def stream_message(
                     answer_len=len(ai_content),
                 )
 
-                # ── 3. 补拉 Dify Messages API 获取检索来源 ──
+                # ── 3. 获取检索来源（优先用 SSE 中的，REST API 作为备份） ──
                 citations_response = []
-                if dify_message_id:
+                resources = sse_retriever_resources
+                if not resources and dify_message_id:
                     try:
                         msg_detail = await dify.get_message(dify_message_id)
                         if msg_detail:
@@ -536,54 +544,72 @@ async def stream_message(
                                 or msg_detail.get("retrieval_resources")
                                 or []
                             )
-                            logger.info(
-                                "dify_message_api_resources",
-                                message_id=dify_message_id,
-                                resources_count=len(resources),
-                            )
-                            if resources:
-                                # 将 Dify retriever_resources 转换为 RetrievedChunk 列表
-                                from app.clients.dify_client import RetrievedChunk
-                                chunks = []
-                                for idx, r in enumerate(resources):
-                                    chunk = RetrievedChunk(
-                                        content=r.get("content", ""),
-                                        source_name=r.get("document_name", r.get("name", f"来源{idx+1}")),
-                                        source_id=r.get("document_id", ""),
-                                        chunk_id=r.get("id", r.get("segment_id", "")),
-                                        score=float(r.get("score", 0)),
-                                        position=idx,
-                                    )
-                                    chunks.append(chunk)
-
-                                # 写入 Citation 表
-                                citation_svc = CitationService(db=db)
-                                created_citations = await citation_svc.create_citations_from_chunks(
-                                    document_id=document_id,
-                                    chunks=chunks,
-                                    content=ai_content,
-                                )
-                                citations_response = [
-                                    {
-                                        "id": str(c.id),
-                                        "ref_mark": c.ref_mark,
-                                        "source_name": c.source_name,
-                                        "source_id": c.source_id or "",
-                                        "chunk_content": c.chunk_content[:200] if c.chunk_content else "",
-                                    }
-                                    for c in created_citations
-                                ]
-                                logger.info(
-                                    "citations_from_dify_api",
-                                    count=len(citations_response),
-                                    document_id=str(document_id),
-                                )
                     except Exception as e:
                         logger.error(
                             "dify_get_message_failed",
                             error=str(e),
                             message_id=dify_message_id,
                         )
+                # 如果 SSE 和 API 都没有结构化数据，尝试从正文中解析引用来源
+                if not resources:
+                    import re as _re
+                    import json as _json
+                    ref_pattern = _re.compile(r'【引用来源[\uff1a:]:?\s*([^\u3011]+)\u3011')
+                    for ref_match in ref_pattern.finditer(clean_content or ''):
+                        ref_content = ref_match.group(1).strip()
+                        entries = _re.split(r'[\uff1b;]', ref_content)
+                        for entry in entries:
+                            entry = entry.strip()
+                            if entry:
+                                resources.append({
+                                    "content": entry,
+                                    "document_name": entry,
+                                    "document_id": '',
+                                    "id": '',
+                                    "segment_id": '',
+                                    "score": 1.0,
+                                })
+                if resources:
+                    logger.info(
+                        "dify_retriever_resources",
+                        message_id=dify_message_id or "(from SSE)",
+                        resources_count=len(resources),
+                        source="text_parse" if not sse_retriever_resources and not dify_message_id else "sse" if sse_retriever_resources else "api",
+                    )
+                    from app.clients.dify_client import RetrievedChunk
+                    chunks = []
+                    for idx, r in enumerate(resources):
+                        chunk = RetrievedChunk(
+                            content=r.get("content", ""),
+                            source_name=r.get("document_name", r.get("name", f"来源{idx+1}")),
+                            source_id=r.get("document_id", ""),
+                            chunk_id=r.get("id", r.get("segment_id", "")),
+                            score=float(r.get("score", 0)),
+                            position=idx,
+                        )
+                        chunks.append(chunk)
+
+                    citation_svc = CitationService(db=db)
+                    created_citations = await citation_svc.create_citations_from_chunks(
+                        document_id=document_id,
+                        chunks=chunks,
+                        content=ai_content,
+                    )
+                    citations_response = [
+                        {
+                            "id": str(c.id),
+                            "ref_mark": c.ref_mark,
+                            "source_name": c.source_name,
+                            "source_id": c.source_id or "",
+                            "chunk_content": c.chunk_content[:200] if c.chunk_content else "",
+                        }
+                        for c in created_citations
+                    ]
+                    logger.info(
+                        "citations_created",
+                        count=len(citations_response),
+                        document_id=str(document_id),
+                    )
 
         except Exception as e:
             logger.error("stream_error", error=str(e), conversation_id=str(conversation_id))

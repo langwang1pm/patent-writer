@@ -197,6 +197,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const { currentConversationId } = get()
     if (!currentConversationId) return
 
+    // 清除上次回答的引用来源，等待本次回答的新来源
+    useCitationStore.getState().setCitations([])
+
     set({ isStreaming: true, streamPhase: 'connecting', error: null })
 
     // 先添加用户消息到 UI
