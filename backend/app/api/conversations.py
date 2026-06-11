@@ -321,12 +321,17 @@ async def send_message(
         ai_content = f"⚠️ 调用 AI 服务失败:{str(e)}\n\n请检查 Dify 服务是否正常运行,或稍后重试。"
 
     # 创建 AI 回复 + Document 实体
-    auto_title = _extract_title_from_content(ai_content) or "AI 回复"
+    # 清除 <think> 和【引用来源】
+    import re
+    clean_content = re.sub(r'<think>.*?</think>', '', ai_content, flags=re.DOTALL).strip()
+    clean_content = re.sub(r'【引用来源[：:][^】]+】', '', clean_content).strip()
+    clean_content = re.sub(r'(?<!\n)# ', '\n# ', clean_content).strip()
+    auto_title = _extract_title_from_content(clean_content) or "AI 回复"
     document = Document(
         conversation_id=conversation_id,
         title=auto_title,
-        content_html=ai_content,
-        content_markdown=ai_content,
+        content_html=clean_content,
+        content_markdown=clean_content,
     )
     db.add(document)
     await db.flush()
@@ -486,16 +491,14 @@ async def stream_message(
                 # ── 2. 保存 AI 回复 + 创建 Document 实体 ──
                 ai_content = "".join(full_answer) or "(AI 未返回内容,请检查 Dify 服务配置)"
 
-                # 提取 <think> 思考内容
+                # 清除 <think> 思考内容和【引用来源】
                 import re
-                think_pattern = r'<think>(.*?)</think>(.*)'
-                match = re.search(think_pattern, ai_content, re.DOTALL)
-                if match:
-                    thinking_content = match.group(1).strip()
-                    clean_content = match.group(2).strip()
-                else:
-                    thinking_content = None
-                    clean_content = ai_content
+                clean_content = re.sub(r'<think>.*?</think>', '', ai_content, flags=re.DOTALL).strip()
+                clean_content = re.sub(r'【引用来源[：:][^】]+】', '', clean_content).strip()
+                clean_content = re.sub(r'(?<!\n)# ', '\n# ', clean_content).strip()
+                # 提取第一个思考内容用于消息记录
+                think_first = re.search(r'<think>(.*?)</think>', ai_content, re.DOTALL)
+                thinking_content = think_first.group(1).strip() if think_first else None
 
                 # 创建 Document 实体(持久化附件,支持后续编辑/AI修改)
                 auto_title = _extract_title_from_content(clean_content) or "AI 回复"
