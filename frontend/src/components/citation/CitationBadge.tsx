@@ -89,11 +89,7 @@ export default function CitationBadge({
                 {chunkContent.split('\\n').map((line, li) => {
                   const uuidMatch = line.match(/^([0-9a-f-]{36})~~~(.+?)~~~(.+)$/)
                   if (uuidMatch) {
-                                        // 优先使用 citationStore 中的 source_id（更可靠），否则从文本提取 UUID
-                    const sourceId = citationId
-                      ? (() => { const c = useCitationStore.getState().citations.find(ci => ci.id === citationId); return c ? c.source_id : null })()
-                      : null
-                    const docUuid = sourceId || uuidMatch[1]
+                                        const docUuid = uuidMatch[1]
                     const docName = uuidMatch[2]
                     const ext = docName.split('.').pop()?.toLowerCase() || ''
                     const isOffice = ['doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp','csv'].includes(ext)
