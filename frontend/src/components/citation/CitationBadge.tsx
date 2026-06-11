@@ -86,11 +86,21 @@ export default function CitationBadge({
             </p>
             {chunkContent && (
               <div className="text-gray-500 text-[11px] leading-relaxed">
-                {chunkContent.split('\\n').map((line, li) => (
-                  <p key={li} className="mb-0.5 last:mb-0 whitespace-pre-wrap break-all">
-                    {line}
-                  </p>
-                ))}
+                {chunkContent.split('\\n').map((line, li) => {
+                  const uuidMatch = line.match(/^([0-9a-f-]{36})~~~(.+?)~~~(.+)$/)
+                  if (uuidMatch) {
+                    const docUrl = '/preview?fileKey=kb:' + uuidMatch[1] + '&fileName=' + encodeURIComponent(uuidMatch[2]) + '&mode=view'
+                    return (
+                      <p key={li} className="mb-0.5 last:mb-0 whitespace-pre-wrap break-all">
+                        <a href={docUrl} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-800 underline font-medium">
+                          {uuidMatch[2]}
+                        </a>
+                        ~~~{uuidMatch[3]}
+                      </p>
+                    )
+                  }
+                  return <p key={li} className="mb-0.5 last:mb-0 whitespace-pre-wrap break-all">{line}</p>
+                })}
               </div>
             )}
           </div>
