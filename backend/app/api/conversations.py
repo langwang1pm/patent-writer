@@ -514,10 +514,12 @@ async def stream_message(
                 document_id = document.id
 
                 # 创建 AI 回复 Message,关联 document_id
+                # 消息正文：只移除 think 标签，保留引用来源（用于前端渲染引用标识）
+                message_content = re.sub(r'<think>.*?</think>', '', ai_content, flags=re.DOTALL).strip()
                 ai_message = Message(
                     conversation_id=conversation_id,
                     role="assistant",
-                    content=clean_content,
+                    content=message_content,
                     document_id=document_id,
                     thinking_content=thinking_content,
                 )
