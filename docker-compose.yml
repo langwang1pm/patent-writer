@@ -19,11 +19,7 @@ services:
     networks:
       - patent-writer-net
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost/healthcheck"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
+      disable: true
 
   # ============================================
   # 后端服务 — FastAPI
@@ -53,7 +49,7 @@ services:
       ONLYOFFICE_CALLBACK_URL: ${ONLYOFFICE_CALLBACK_URL}
 
     healthcheck:
-      disabled: true
+      disable: true
 
     volumes:
       - ${UPLOAD_DIR_HOST:-./data/uploads}:/app/uploads
@@ -66,7 +62,7 @@ services:
 
     depends_on:
       onlyoffice:
-        condition: service_healthy
+
 
 
 
@@ -90,7 +86,7 @@ services:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL}
 
     healthcheck:
-      disabled: true
+      disable: true
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
