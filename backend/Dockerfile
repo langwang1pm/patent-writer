@@ -22,7 +22,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY . .
 
 # 安装健康检查所需工具
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+# RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # 非 root 用户
 RUN useradd --create-home --shell /bin/bash appuser && chown -R appuser:appuser /app
